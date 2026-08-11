@@ -1,4 +1,4 @@
-Shader "ASCII Shader/Cell Sampling"
+Shader "ASCII Shader/Renderer"
 {
     Properties
     {
@@ -13,7 +13,7 @@ Shader "ASCII Shader/Cell Sampling"
 
         Pass
         {
-            Name "Cell Sampling"
+            Name "ASCII Renderer"
 
             Cull Off
             ZWrite Off
@@ -23,7 +23,7 @@ Shader "ASCII Shader/Cell Sampling"
 
             #pragma target 3.5
             #pragma vertex Vert
-            #pragma fragment CellSamplingFragment
+            #pragma fragment AsciiRendererFragment
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
@@ -31,7 +31,7 @@ Shader "ASCII Shader/Cell Sampling"
                 float _CellSize;
             CBUFFER_END
 
-            float4 CellSamplingFragment(Varyings input) : SV_Target
+            float4 AsciiRendererFragment(Varyings input) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
