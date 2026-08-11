@@ -6,6 +6,10 @@ Shader "ASCII Shader/Renderer"
         _CellHeight ("Cell Height (pixels)", Range(1, 64)) = 8
         _GlyphCount ("Glyph Count", Range(2, 16)) = 10
         _GlyphAtlas ("Glyph Atlas", 2D) = "black" {}
+
+        [Enum(Off, 0, On, 1)]
+        _UseCellTint ("Use Cell Tint", Float) = 0
+
         [Enum(Final, 0, CellColor, 1, Luminance, 2, GlyphIndex, 3)]
         _DebugView ("Debug View", Float) = 0
     }
@@ -31,6 +35,7 @@ Shader "ASCII Shader/Renderer"
             float _CellWidth;
             float _CellHeight;
             float _GlyphCount;
+            float _UseCellTint;
             float _DebugView;
         CBUFFER_END
 
@@ -41,6 +46,30 @@ Shader "ASCII Shader/Renderer"
                 round(float2(_CellWidth, _CellHeight)),
                 float2(1.0, 1.0)
             );
+        }
+
+
+        float3 GetCellTint(float3 sourceColor)
+        {
+            float3 nonNegativeColor = max(
+                sourceColor,
+                float3(0.0, 0.0, 0.0)
+            );
+
+            float maximumChannel = max(
+                nonNegativeColor.r,
+                max(
+                    nonNegativeColor.g,
+                    nonNegativeColor.b
+                )
+            );
+
+            if (maximumChannel <= 0.0001)
+            {
+                return float3(1.0, 1.0, 1.0);
+            }
+
+            return nonNegativeColor / maximumChannel;
         }
 
 
@@ -195,12 +224,18 @@ Shader "ASCII Shader/Renderer"
                     0
                 ).r;
 
-            return float4(
-                glyphMask,
-                glyphMask,
-                glyphMask,
-                1.0
-            );
+            float3 glyphColor =
+                float3(1.0, 1.0, 1.0);
+
+            if (_UseCellTint > 0.5)
+            {
+                glyphColor = GetCellTint(sourceColor.rgb);
+            }
+
+            float3 outputColor =
+                glyphColor * glyphMask;
+
+            return float4(outputColor, 1.0);
         }
 
         ENDHLSL
