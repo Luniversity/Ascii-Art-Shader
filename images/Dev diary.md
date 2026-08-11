@@ -27,3 +27,10 @@ Next, I created the actual cells. All the cells are is just fixed sized squares.
 ![alt text](image-1.png)
 
 The cell size here is 8px on a 1080p screen. That looks like a size to put symbols on. 16px is too big, and 4px kinda drowns out the cells. 
+
+But this is just an arbitrary checkboard pattern. I need to actually make use of the screen pixels, and do stuff with it. The simplest thing I could do with the pixels is to just choose the center pixel (of the cell) and fill the cell with that colour.
+
+![alt text](image-2.png)
+
+Now it looks like a "poorly" downscaled image of the original scene. 
+

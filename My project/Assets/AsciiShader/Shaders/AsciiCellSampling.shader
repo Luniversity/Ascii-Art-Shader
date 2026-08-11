@@ -1,4 +1,4 @@
-Shader "ASCII Shader/Pass Through"
+Shader "ASCII Shader/Cell Sampling"
 {
     Properties
     {
@@ -13,7 +13,7 @@ Shader "ASCII Shader/Pass Through"
 
         Pass
         {
-            Name "Pass Through"
+            Name "Cell Sampling"
 
             Cull Off
             ZWrite Off
@@ -23,7 +23,7 @@ Shader "ASCII Shader/Pass Through"
 
             #pragma target 3.5
             #pragma vertex Vert
-            #pragma fragment PassThroughFragment
+            #pragma fragment CellSamplingFragment
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
@@ -31,21 +31,25 @@ Shader "ASCII Shader/Pass Through"
                 float _CellSize;
             CBUFFER_END
 
-            float4 PassThroughFragment(Varyings input) : SV_Target
+            float4 CellSamplingFragment(Varyings input) : SV_Target
             {
-                float cellSize = max(_CellSize, 1.0);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
+                float cellSize = max(round(_CellSize), 1.0);
 
                 float2 textureResolution = _BlitTexture_TexelSize.zw;
                 float2 pixelPosition = input.texcoord * textureResolution;
                 float2 cellIndex = floor(pixelPosition / cellSize);
 
-                float checker = fmod(cellIndex.x + cellIndex.y, 2.0);
+                float2 cellCenterPixel = (cellIndex + 0.5) * cellSize;
+                float2 cellCenterUV = cellCenterPixel / textureResolution;
 
-                float3 darkColor = float3(0.05, 0.07, 0.12);
-                float3 lightColor = float3(0.85, 0.90, 1.00);
-                float3 debugColor = lerp(darkColor, lightColor, checker);
-
-                return float4(debugColor, 1.0);
+                return SAMPLE_TEXTURE2D_X_LOD(
+                    _BlitTexture,
+                    sampler_PointClamp,
+                    cellCenterUV,
+                    0
+                );
             }
 
             ENDHLSL
