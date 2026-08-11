@@ -34,3 +34,8 @@ But this is just an arbitrary checkboard pattern. I need to actually make use of
 
 Now it looks like a "poorly" downscaled image of the original scene. 
 
+So far we are making every cell a square. But a lot of fonts are rectangular. So I should make sure to that cells could be sizes like 8x16 pixels and still work. 
+
+![alt text](image-3.png)
+
+Tall cells look kinda weird. Hopefully it pays off to have flexible cells sizes. 

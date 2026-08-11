@@ -2,7 +2,8 @@ Shader "ASCII Shader/Renderer"
 {
     Properties
     {
-        _CellSize ("Cell Size (pixels)", Range(1, 64)) = 16
+        _CellWidth ("Cell Width (pixels)", Range(1, 64)) = 8
+        _CellHeight ("Cell Height (pixels)", Range(1, 64)) = 16
     }
     SubShader
     {
@@ -28,14 +29,18 @@ Shader "ASCII Shader/Renderer"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
             CBUFFER_START(UnityPerMaterial)
-                float _CellSize;
+                float _CellWidth;
+                float _CellHeight;
             CBUFFER_END
 
             float4 AsciiRendererFragment(Varyings input) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-                float cellSize = max(round(_CellSize), 1.0);
+                float2 cellSize = max(
+                    round(float2(_CellWidth, _CellHeight)),
+                    float2(1.0, 1.0)
+                );
 
                 float2 textureResolution = _BlitTexture_TexelSize.zw;
                 float2 pixelPosition = input.texcoord * textureResolution;
