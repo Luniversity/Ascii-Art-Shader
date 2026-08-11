@@ -7,7 +7,7 @@
 
 * text=auto
 # Define macros (only works in top-level gitattributes files)
-[attr]lfs               filter=lfs diff=lfs merge=lfs -text
+[attr]binary-file       -diff -merge -text
 [attr]unity-json        eol=lf linguist-language=json
 [attr]unity-yaml        merge=unityyamlmerge eol=lf linguist-language=yaml
 # Unity source files
@@ -60,90 +60,89 @@
 # Exclude generated or third-party files from GitHub stats and diffs
 "My project/Assets/Plugins/**"            linguist-generated
 "My project/Packages/packages-lock.json"  linguist-generated
-# Unity LFS
-*.cubemap               lfs
-*.unitypackage          lfs
+# Unity binary files
+*.cubemap               binary-file
+*.unitypackage          binary-file
 # 3D models
-*.3dm                   lfs
-*.3ds                   lfs
-*.blend                 lfs
-*.blend1                lfs
-*.c4d                   lfs
-*.collada               lfs
-*.dae                   lfs
-*.dxf                   lfs
-*.FBX                   lfs
-*.fbx                   lfs
-*.jas                   lfs
-*.lws                   lfs
-*.lxo                   lfs
-*.ma                    lfs
-*.max                   lfs
-*.mb                    lfs
-*.obj                   lfs
-*.ply                   lfs
-*.skp                   lfs
-*.stl                   lfs
-*.ztl                   lfs
+*.3dm                   binary-file
+*.3ds                   binary-file
+*.blend                 binary-file
+*.blend1                binary-file
+*.c4d                   binary-file
+*.collada               binary-file
+*.dae                   binary-file
+*.dxf                   binary-file
+*.FBX                   binary-file
+*.fbx                   binary-file
+*.jas                   binary-file
+*.lws                   binary-file
+*.lxo                   binary-file
+*.ma                    binary-file
+*.max                   binary-file
+*.mb                    binary-file
+*.obj                   binary-file
+*.ply                   binary-file
+*.skp                   binary-file
+*.stl                   binary-file
+*.ztl                   binary-file
 # Audio
-*.aif                   lfs
-*.aiff                  lfs
-*.it                    lfs
-*.mod                   lfs
-*.mp3                   lfs
-*.ogg                   lfs
-*.s3m                   lfs
-*.wav                   lfs
-*.xm                    lfs
+*.aif                   binary-file
+*.aiff                  binary-file
+*.it                    binary-file
+*.mod                   binary-file
+*.mp3                   binary-file
+*.ogg                   binary-file
+*.s3m                   binary-file
+*.wav                   binary-file
+*.xm                    binary-file
 # Video
-*.asf                   lfs
-*.avi                   lfs
-*.flv                   lfs
-*.mov                   lfs
-*.mp4                   lfs
-*.mpeg                  lfs
-*.mpg                   lfs
-*.ogv                   lfs
-*.wmv                   lfs
+*.asf                   binary-file
+*.avi                   binary-file
+*.flv                   binary-file
+*.mov                   binary-file
+*.mp4                   binary-file
+*.mpeg                  binary-file
+*.mpg                   binary-file
+*.ogv                   binary-file
+*.wmv                   binary-file
 # Images
-*.bmp                   lfs
-*.exr                   lfs
-*.gif                   lfs
-*.hdr                   lfs
-*.iff                   lfs
-*.jpeg                  lfs
-*.jpg                   lfs
-*.pict                  lfs
-*.png                   lfs
-*.psd                   lfs
-*.tga                   lfs
-*.tif                   lfs
-*.tiff                  lfs
-*.webp                  lfs
+*.bmp                   binary-file
+*.exr                   binary-file
+*.gif                   binary-file
+*.hdr                   binary-file
+*.iff                   binary-file
+*.jpeg                  binary-file
+*.jpg                   binary-file
+*.pict                  binary-file
+*.png                   binary-file
+*.psd                   binary-file
+*.tga                   binary-file
+*.tif                   binary-file
+*.tiff                  binary-file
+*.webp                  binary-file
 # Compressed archives
-*.7z                    lfs
-*.bz2                   lfs
-*.gz                    lfs
-*.rar                   lfs
-*.tar                   lfs
-*.zip                   lfs
+*.7z                    binary-file
+*.bz2                   binary-file
+*.gz                    binary-file
+*.rar                   binary-file
+*.tar                   binary-file
+*.zip                   binary-file
 # Compiled libraries
-*.dll                   lfs
-*.pdb                   lfs
-*.so                    lfs
+*.dll                   binary-file
+*.pdb                   binary-file
+*.so                    binary-file
 # Fonts
-*.otf                   lfs
-*.ttf                   lfs
+*.otf                   binary-file
+*.ttf                   binary-file
 # Executables and installers
-*.apk                   lfs
-*.exe                   lfs
+*.apk                   binary-file
+*.exe                   binary-file
 # Documents
-*.pdf                   lfs
+*.pdf                   binary-file
 # Other binary formats
-*.a                     lfs
-*.reason                lfs
-*.rns                   lfs
-*.skel.bytes            lfs
+*.a                     binary-file
+*.reason                binary-file
+*.rns                   binary-file
+*.skel.bytes            binary-file
 # Lighting pre-bake data should use binary diffs
 LightingData.asset      binary
-* !text !filter !merge !diff
