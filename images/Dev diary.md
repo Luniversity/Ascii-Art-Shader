@@ -76,3 +76,11 @@ I then replaced the font with an actual square one. Now we can render cells at 8
 ![alt text](image-8.png)
 
 Now the structure is even and the font looks right. 
+
+Next I want to go back and improve the cell sampling. For each cell, I currently just look at the center of the cell and use that for calculating luminance. A better way to do this is to actually downscale the image by 8 so that we get a blurred/lower resolution version of the image. 
+
+![alt text](image-10.png)
+
+Looks a bit more cleaner. I also increased the intensity of the light so we get a better range of luminance.
+
+![alt text](image-11.png)
