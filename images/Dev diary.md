@@ -13,3 +13,8 @@ Here is the first test scene I made. It rotates, thats it
 ### Day 1 - Make it exist first
 
 I'll start by making the smallest complete path from camera image -> shader -> back to the screen. So basically creating a shader that does nothing but pass the same information along.
+
+![alt text](image.png)
+
+Holy hell the shader exists and makes things more red
+
