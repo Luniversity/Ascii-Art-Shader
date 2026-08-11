@@ -98,3 +98,12 @@ Luminance: what the image looks like after converting rgb to luminance
 GlyphIndex: what the image looks like after quantizing but before rendering any glyphs
 ![alt text](image-14.png)
 
+Looking at a bunch of pure white and pure black pixels does hurt your eyes. One easy fix for this is to just make the two colours we have, blakc and white, into something less black and less white. So I added a colour palette view mode to decrease the contrast a bit.
+
+![alt text](image-15.png)
+
+I could stare at this for at least 5 min
+
+![alt text](image-16.png)
+
+I asked codex to generate colour palettes and I can already envision a website that looks like this

@@ -7,8 +7,18 @@ Shader "ASCII Shader/Renderer"
         _GlyphCount ("Glyph Count", Range(2, 16)) = 10
         _GlyphAtlas ("Glyph Atlas", 2D) = "black" {}
 
-        [Enum(Off, 0, On, 1)]
-        _UseCellTint ("Use Cell Tint", Float) = 0
+        [Enum(Monochrome, 0, Palette, 1, CellTint, 2)]
+        _ColorMode ("Color Mode", Float) = 0
+
+        _GlyphColor (
+            "Palette Glyph Color",
+            Color
+        ) = (1.0, 1.0, 1.0, 1.0)
+
+        _BackgroundColor (
+            "Palette Background Color",
+            Color
+        ) = (0.0, 0.0, 0.0, 1.0)
 
         [Enum(Final, 0, CellColor, 1, Luminance, 2, GlyphIndex, 3)]
         _DebugView ("Debug View", Float) = 0
@@ -35,7 +45,9 @@ Shader "ASCII Shader/Renderer"
             float _CellWidth;
             float _CellHeight;
             float _GlyphCount;
-            float _UseCellTint;
+            float _ColorMode;
+            float4 _GlyphColor;
+            float4 _BackgroundColor;
             float _DebugView;
         CBUFFER_END
 
@@ -224,16 +236,31 @@ Shader "ASCII Shader/Renderer"
                     0
                 ).r;
 
-            float3 glyphColor =
+            int colorMode =
+                (int)round(_ColorMode);
+
+            float3 foregroundColor =
                 float3(1.0, 1.0, 1.0);
 
-            if (_UseCellTint > 0.5)
+            float3 backgroundColor =
+                float3(0.0, 0.0, 0.0);
+
+            if (colorMode == 1)
             {
-                glyphColor = GetCellTint(sourceColor.rgb);
+                foregroundColor = _GlyphColor.rgb;
+                backgroundColor = _BackgroundColor.rgb;
+            }
+            else if (colorMode == 2)
+            {
+                foregroundColor =
+                    GetCellTint(sourceColor.rgb);
             }
 
-            float3 outputColor =
-                glyphColor * glyphMask;
+            float3 outputColor = lerp(
+                backgroundColor,
+                foregroundColor,
+                glyphMask
+            );
 
             return float4(outputColor, 1.0);
         }
