@@ -84,3 +84,17 @@ Next I want to go back and improve the cell sampling. For each cell, I currently
 Looks a bit more cleaner. I also increased the intensity of the light so we get a better range of luminance.
 
 ![alt text](image-11.png)
+
+### Day 2 
+
+A good thing to add early on is debugging views:
+
+Cell colour: what the image looks like after downscaling
+![alt text](image-12.png)
+
+Luminance: what the image looks like after converting rgb to luminance
+![alt text](image-13.png)
+
+GlyphIndex: what the image looks like after quantizing but before rendering any glyphs
+![alt text](image-14.png)
+

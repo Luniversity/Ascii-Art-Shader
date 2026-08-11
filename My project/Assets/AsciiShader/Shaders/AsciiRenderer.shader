@@ -6,6 +6,8 @@ Shader "ASCII Shader/Renderer"
         _CellHeight ("Cell Height (pixels)", Range(1, 64)) = 8
         _GlyphCount ("Glyph Count", Range(2, 16)) = 10
         _GlyphAtlas ("Glyph Atlas", 2D) = "black" {}
+        [Enum(Final, 0, CellColor, 1, Luminance, 2, GlyphIndex, 3)]
+        _DebugView ("Debug View", Float) = 0
     }
 
     SubShader
@@ -29,6 +31,7 @@ Shader "ASCII Shader/Renderer"
             float _CellWidth;
             float _CellHeight;
             float _GlyphCount;
+            float _DebugView;
         CBUFFER_END
 
 
@@ -145,6 +148,36 @@ Shader "ASCII Shader/Renderer"
                 floor(luminance * glyphCount),
                 glyphCount - 1.0
             );
+
+            int debugView = (int)round(_DebugView);
+
+            if (debugView == 1)
+            {
+                return float4(sourceColor.rgb, 1.0);
+            }
+
+            if (debugView == 2)
+            {
+                return float4(
+                    luminance,
+                    luminance,
+                    luminance,
+                    1.0
+                );
+            }
+
+            if (debugView == 3)
+            {
+                float normalizedGlyphIndex =
+                    glyphIndex / (glyphCount - 1.0);
+
+                return float4(
+                    normalizedGlyphIndex,
+                    normalizedGlyphIndex,
+                    normalizedGlyphIndex,
+                    1.0
+                );
+            }
 
             float2 cellUV =
                 frac(pixelPosition / cellSize);
