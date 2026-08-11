@@ -38,4 +38,41 @@ So far we are making every cell a square. But a lot of fonts are rectangular. So
 
 ![alt text](image-3.png)
 
-Tall cells look kinda weird. Hopefully it pays off to have flexible cells sizes. 
+8x32 sized cells. Tall cells look kinda weird. Hopefully it pays off to have flexible cells sizes. 
+
+I now have a good foundation to starting figuring out what ascii symbol to put on the screen. I need to turn the rgb colours into luminance, convert that into a symbol using some index.
+
+At this point I only care about luminance
+![alt text](image-4.png)
+
+Luminance is continuous and the ascii symbols are very much descrete. So we will need to do some quantization. 
+
+I don't have the symbols yet so we will just quantize the colours. I basically made a resolution and colour downscaler.
+
+![alt text](image-5.png)
+
+8 colours only (imagine this is 8 different symbols)
+
+With 8 colurs I chose 8 symbols that are kind of spread out evenly when it comes to density
+
+![alt text](glyph_candidates_preview.png)
+
+(The first one is blank since its the spacebar)
+
+And now if we render each symbol at its correspoding place we get this:
+
+![alt text](image-6.png)
+
+Ascii art version 0 has been achieved.
+
+But this setup uses 8x16 cells and is not very "pixel-like". I think it would be better if we actually used square fonts. This is what it looks like if i just squashed the current font down to a square:
+
+![alt text](image-7.png)
+
+The structure here looks much better, its just that the symbols looks a bit wacky. 
+
+I then replaced the font with an actual square one. Now we can render cells at 8x8. Its tiny though so squint :)
+![alt text](<1x0 8x8 3.png>)
+![alt text](image-8.png)
+
+Now the structure is even and the font looks right. 

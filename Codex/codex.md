@@ -33,7 +33,7 @@ This document records how the user and Codex intend to work together on the ASCI
 ## Version-control habits
 
 - Work with Git throughout the project so the development history remains clear.
-- Prefer small, meaningful commits that each represent one understandable step, experiment, or fix.
+- Prefer one coherent commit per completed milestone. Individual learning steps should remain uncommitted until the milestone review unless the user explicitly requests a checkpoint commit.
 - Do not rush to publish work. A coherent local history is more important than frequent remote updates.
 - Do not commit, push, rewrite history, or discard changes unless the user has authorized the relevant action.
 - Preserve unrelated user changes and call out overlaps before modifying them.
@@ -51,4 +51,3 @@ This document records how the user and Codex intend to work together on the ASCI
 - Build the effect incrementally, starting with a minimal real-time image-space prototype.
 - Keep core shader logic reasonably separate from Unity-specific integration so portability can be explored later without constraining every early decision.
 - Optimize based on measurements and identified bottlenecks, while treating real-time performance and temporal stability as core requirements.
-
