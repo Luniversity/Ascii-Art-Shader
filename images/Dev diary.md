@@ -18,3 +18,12 @@ I'll start by making the smallest complete path from camera image -> shader -> b
 
 Holy hell the shader exists and makes things more red
 
+A frag shader normally treats every output pixel independently. But for my ascii rendering we need groups of pixels to form cells, that later turn into an ascii character. So we need: individual screen pixels -> groups of pixels into fixed cells. We can later then do math and analysis on each cell to determine a symbol.
+
+I'm on a 4k screen so idk how small pixel counts will look on my screen physically. I might try to just work on 1080p idk. 
+
+Next, I created the actual cells. All the cells are is just fixed sized squares.
+
+![alt text](image-1.png)
+
+The cell size here is 8px on a 1080p screen. That looks like a size to put symbols on. 16px is too big, and 4px kinda drowns out the cells. 
