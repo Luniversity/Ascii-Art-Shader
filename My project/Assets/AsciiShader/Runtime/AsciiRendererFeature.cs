@@ -38,6 +38,15 @@ public enum AsciiEdgeInput
 }
 
 
+public enum AsciiBenchmarkRenderMode
+{
+    MaterialSettings = 0,
+    Disabled = 1,
+    LuminanceOnly = 2,
+    EdgeAware = 3,
+}
+
+
 public sealed class AsciiRendererFeature
     : ScriptableRendererFeature
 {
@@ -54,6 +63,28 @@ public sealed class AsciiRendererFeature
     private Settings settings = new Settings();
 
     private AsciiRenderPass renderPass;
+
+    [NonSerialized]
+    private AsciiBenchmarkRenderMode benchmarkRenderMode =
+        AsciiBenchmarkRenderMode.MaterialSettings;
+
+
+    internal Material BenchmarkMaterial => settings.material;
+
+
+    internal void SetBenchmarkRenderMode(
+        AsciiBenchmarkRenderMode mode
+    )
+    {
+        benchmarkRenderMode = mode;
+    }
+
+
+    internal void ClearBenchmarkRenderMode()
+    {
+        benchmarkRenderMode =
+            AsciiBenchmarkRenderMode.MaterialSettings;
+    }
 
 
     public override void Create()
@@ -76,6 +107,14 @@ public sealed class AsciiRendererFeature
             return;
         }
 
+        if (
+            benchmarkRenderMode
+            == AsciiBenchmarkRenderMode.Disabled
+        )
+        {
+            return;
+        }
+
         CameraType cameraType =
             renderingData.cameraData.cameraType;
 
@@ -88,7 +127,10 @@ public sealed class AsciiRendererFeature
         }
 
         renderPass.renderPassEvent = settings.injectionPoint;
-        renderPass.Setup(settings.material);
+        renderPass.Setup(
+            settings.material,
+            benchmarkRenderMode
+        );
 
         renderer.EnqueuePass(renderPass);
     }
@@ -168,6 +210,7 @@ public sealed class AsciiRendererFeature
             );
 
         private Material material;
+        private AsciiBenchmarkRenderMode benchmarkRenderMode;
 
 
         private sealed class CellEdgeAggregationPassData
@@ -185,9 +228,13 @@ public sealed class AsciiRendererFeature
         }
 
 
-        public void Setup(Material passMaterial)
+        public void Setup(
+            Material passMaterial,
+            AsciiBenchmarkRenderMode passBenchmarkRenderMode
+        )
         {
             material = passMaterial;
+            benchmarkRenderMode = passBenchmarkRenderMode;
         }
 
 
@@ -237,13 +284,28 @@ public sealed class AsciiRendererFeature
             int cellTextureHeight =
                 (sourceHeight + cellHeight - 1) / cellHeight;
 
-            int debugView = Mathf.RoundToInt(
-                material.GetFloat(DebugViewId)
-            );
+            bool forcesLuminanceOnly =
+                benchmarkRenderMode
+                == AsciiBenchmarkRenderMode.LuminanceOnly;
+
+            bool forcesEdgeAware =
+                benchmarkRenderMode
+                == AsciiBenchmarkRenderMode.EdgeAware;
+
+            int debugView =
+                forcesLuminanceOnly || forcesEdgeAware
+                    ? (int)AsciiDebugView.Final
+                    : Mathf.RoundToInt(
+                        material.GetFloat(DebugViewId)
+                    );
 
             bool rendersFinalComposite =
-                debugView == (int)AsciiDebugView.Final
-                && material.GetFloat(EnableEdgeGlyphsId) > 0.5f;
+                forcesEdgeAware
+                || (
+                    !forcesLuminanceOnly
+                    && debugView == (int)AsciiDebugView.Final
+                    && material.GetFloat(EnableEdgeGlyphsId) > 0.5f
+                );
 
             // The full-resolution branch is only needed for its dedicated
             // diagnostics or for the edge-aware final composite.
