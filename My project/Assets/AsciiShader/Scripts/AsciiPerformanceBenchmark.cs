@@ -14,6 +14,15 @@ namespace AsciiShader
     {
         private static readonly int DebugViewId =
             Shader.PropertyToID("_DebugView");
+        private static readonly int LuminanceMappingModeId =
+            Shader.PropertyToID("_LuminanceMappingMode");
+        private static readonly int UseManualLuminanceBoundsId =
+            Shader.PropertyToID("_UseManualLuminanceBounds");
+
+        private const string SeedLuminanceBoundsPassName =
+            "Seed Cell Luminance Bounds";
+        private const string ReduceLuminanceBoundsPassName =
+            "Reduce Cell Luminance Bounds";
 
         private enum BenchmarkPhase
         {
@@ -40,6 +49,8 @@ namespace AsciiShader
             "Gaussian Blur Vertical",
             "Prepare Full-Resolution Edge Evidence",
             "Analyze ASCII Cells",
+            SeedLuminanceBoundsPassName,
+            ReduceLuminanceBoundsPassName,
             "Aggregate Composite Cell Edge Evidence",
             "Render Composite ASCII",
             "Render ASCII",
@@ -246,7 +257,18 @@ namespace AsciiShader
                         break;
                     }
 
-                    currentResult = new ModeResult(currentMode);
+                    bool usesAutomaticLuminanceBounds =
+                        BenchmarkMaterial.GetFloat(
+                            LuminanceMappingModeId
+                        ) > 0.5f
+                        && BenchmarkMaterial.GetFloat(
+                            UseManualLuminanceBoundsId
+                        ) <= 0.5f;
+
+                    currentResult = new ModeResult(
+                        currentMode,
+                        usesAutomaticLuminanceBounds
+                    );
                     results.Add(currentResult);
 
                     using PassRecorderSet passRecorders =
@@ -491,7 +513,7 @@ namespace AsciiShader
             var builder = new StringBuilder();
 
             builder.AppendLine(
-                "timestamp,mode,scope,metric,unit,average,median,p95,sample_count,editor,unity_version,platform,operating_system,gpu,gpu_vendor,graphics_api,resolution,cell_size,color_mode,gaussian_sigma,gaussian_radius,gaussian_scale,dog_tau,dog_threshold,minimum_dominant_pixels,minimum_dominance,warmup_seconds,capture_seconds"
+                "timestamp,mode,scope,metric,unit,average,median,p95,sample_count,editor,unity_version,platform,operating_system,gpu,gpu_vendor,graphics_api,resolution,cell_size,color_mode,luminance_mapping,gaussian_sigma,gaussian_radius,gaussian_scale,dog_tau,dog_threshold,minimum_dominant_pixels,minimum_dominance,warmup_seconds,capture_seconds"
             );
 
             foreach (ModeResult result in results)
@@ -634,6 +656,7 @@ namespace AsciiShader
             AppendCsvValue(builder, metadata.Resolution);
             AppendCsvValue(builder, metadata.CellSize);
             AppendCsvValue(builder, metadata.ColorMode);
+            AppendCsvValue(builder, metadata.LuminanceMapping);
             AppendCsvValue(builder, FormatCsvNumber(metadata.GaussianSigma));
             AppendCsvValue(builder, metadata.GaussianRadius.ToString(CultureInfo.InvariantCulture));
             AppendCsvValue(builder, FormatCsvNumber(metadata.GaussianScale));
@@ -673,6 +696,7 @@ namespace AsciiShader
             builder.AppendLine();
             builder.AppendLine($"- Cell size: `{metadata.CellSize}`");
             builder.AppendLine($"- Color mode: `{metadata.ColorMode}`");
+            builder.AppendLine($"- Luminance mapping: `{metadata.LuminanceMapping}`");
             builder.AppendLine($"- Gaussian: sigma `{metadata.GaussianSigma:F3}`, radius `{metadata.GaussianRadius}`, scale `{metadata.GaussianScale:F3}`");
             builder.AppendLine($"- DoG: tau `{metadata.DoGTau:F4}`, threshold `{metadata.DoGThreshold:F5}`");
             builder.AppendLine($"- Classifier: minimum dominant pixels `{metadata.MinimumDominantPixels:F2}`, minimum dominance `{metadata.MinimumDominance:F3}`");
@@ -694,7 +718,7 @@ namespace AsciiShader
 
                 string renderScale =
                     widthScale.Available && heightScale.Available
-                        ? $"{widthScale.Median:F3} × {heightScale.Median:F3}"
+                        ? $"{widthScale.Median:F3} x {heightScale.Median:F3}"
                         : "N/A";
 
                 builder.AppendLine(
@@ -767,7 +791,7 @@ namespace AsciiShader
                 {
                     RankedPass pass = rankedPasses[index];
                     builder.AppendLine(
-                        $"{index + 1}. {GetModeLabel(pass.Mode)} — {pass.Name}: {pass.Median:F3} ms median"
+                        $"{index + 1}. {GetModeLabel(pass.Mode)} - {pass.Name}: {pass.Median:F3} ms median"
                     );
                 }
             }
@@ -948,7 +972,10 @@ namespace AsciiShader
             public int ObservedFrames;
 
 
-            public ModeResult(AsciiBenchmarkRenderMode mode)
+            public ModeResult(
+                AsciiBenchmarkRenderMode mode,
+                bool usesAutomaticLuminanceBounds
+            )
             {
                 Mode = mode;
 
@@ -958,6 +985,12 @@ namespace AsciiShader
                         "Analyze ASCII Cells",
                         new MetricSamples()
                     );
+
+                    if (usesAutomaticLuminanceBounds)
+                    {
+                        AddLuminanceBoundsPasses();
+                    }
+
                     PassGpuTimes.Add(
                         "Render ASCII",
                         new MetricSamples()
@@ -973,7 +1006,9 @@ namespace AsciiShader
                     {
                         string passName = AsciiGpuPassNames[index];
 
-                        if (passName != "Render ASCII")
+                        if (passName != "Render ASCII"
+                            && (usesAutomaticLuminanceBounds
+                                || !IsLuminanceBoundsPass(passName)))
                         {
                             PassGpuTimes.Add(
                                 passName,
@@ -982,6 +1017,28 @@ namespace AsciiShader
                         }
                     }
                 }
+            }
+
+
+            private void AddLuminanceBoundsPasses()
+            {
+                PassGpuTimes.Add(
+                    SeedLuminanceBoundsPassName,
+                    new MetricSamples()
+                );
+                PassGpuTimes.Add(
+                    ReduceLuminanceBoundsPassName,
+                    new MetricSamples()
+                );
+            }
+
+
+            private static bool IsLuminanceBoundsPass(
+                string passName
+            )
+            {
+                return passName == SeedLuminanceBoundsPassName
+                    || passName == ReduceLuminanceBoundsPassName;
             }
 
 
@@ -1216,6 +1273,10 @@ namespace AsciiShader
                 Shader.PropertyToID("_CellHeight");
             private static readonly int ColorModeId =
                 Shader.PropertyToID("_ColorMode");
+            private static readonly int LuminanceMappingModeId =
+                Shader.PropertyToID("_LuminanceMappingMode");
+            private static readonly int UseManualLuminanceBoundsId =
+                Shader.PropertyToID("_UseManualLuminanceBounds");
             private static readonly int GaussianSigmaId =
                 Shader.PropertyToID("_GaussianSigma");
             private static readonly int GaussianRadiusId =
@@ -1245,6 +1306,7 @@ namespace AsciiShader
             public readonly string Resolution;
             public readonly string CellSize;
             public readonly string ColorMode;
+            public readonly string LuminanceMapping;
             public readonly double GaussianSigma;
             public readonly int GaussianRadius;
             public readonly double GaussianScale;
@@ -1269,7 +1331,7 @@ namespace AsciiShader
                 Gpu = SystemInfo.graphicsDeviceName;
                 GpuVendor = SystemInfo.graphicsDeviceVendor;
                 GraphicsApi =
-                    $"{SystemInfo.graphicsDeviceType} — {SystemInfo.graphicsDeviceVersion}";
+                    $"{SystemInfo.graphicsDeviceType} - {SystemInfo.graphicsDeviceVersion}";
                 Resolution = $"{Screen.width}x{Screen.height}";
 
                 int cellWidth = Mathf.Max(
@@ -1292,6 +1354,17 @@ namespace AsciiShader
                     2 => "Cell Tint",
                     _ => "Monochrome",
                 };
+
+                bool usesManualLuminanceBounds =
+                    material.GetFloat(UseManualLuminanceBoundsId) > 0.5f;
+                bool usesAdaptiveLuminanceMapping =
+                    material.GetFloat(LuminanceMappingModeId) > 0.5f;
+
+                LuminanceMapping = usesManualLuminanceBounds
+                    ? "Development Manual"
+                    : usesAdaptiveLuminanceMapping
+                        ? "Adaptive Static Images"
+                        : "Stable";
 
                 GaussianSigma = material.GetFloat(GaussianSigmaId);
                 GaussianRadius = Mathf.RoundToInt(

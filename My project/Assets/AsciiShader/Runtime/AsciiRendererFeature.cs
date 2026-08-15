@@ -28,6 +28,8 @@ public enum AsciiDebugView
     CellEdgeDominantDirection = 16,
     CellEdgeCandidateMask = 17,
     EdgeOnly = 18,
+    RemappedCellLuminance = 19,
+    LuminanceRangeClipping = 20,
 }
 
 
@@ -70,6 +72,26 @@ public sealed class AsciiRendererFeature
 
 
     internal Material BenchmarkMaterial => settings.material;
+
+    public bool HasReportedLuminanceBounds =>
+        renderPass != null
+        && renderPass.HasReportedLuminanceBounds;
+
+    public Vector2 ReportedLuminanceBounds =>
+        renderPass != null
+            ? renderPass.ReportedLuminanceBounds
+            : Vector2.zero;
+
+    public uint LuminanceBoundsReportVersion =>
+        renderPass != null
+            ? renderPass.LuminanceBoundsReportVersion
+            : 0u;
+
+
+    public void RequestLuminanceBoundsReport()
+    {
+        renderPass?.RequestLuminanceBoundsReport();
+    }
 
 
     internal void SetBenchmarkRenderMode(
@@ -158,6 +180,8 @@ public sealed class AsciiRendererFeature
         private const int CellEdgeDebugPassIndex = 14;
         private const int EdgeOnlyAsciiPassIndex = 15;
         private const int CompositeAsciiRendererPassIndex = 16;
+        private const int CellLuminanceBoundsSeedPassIndex = 17;
+        private const int CellLuminanceBoundsReducePassIndex = 18;
         private const int FullResolutionLuminanceDebugView =
             (int)AsciiDebugView.FullResLuminance;
         private const int GaussianLuminanceDebugView =
@@ -204,6 +228,19 @@ public sealed class AsciiRendererFeature
         private static readonly int EnableEdgeGlyphsId =
             Shader.PropertyToID("_EnableEdgeGlyphs");
 
+        private static readonly int LuminanceMappingModeId =
+            Shader.PropertyToID(
+                "_LuminanceMappingMode"
+            );
+
+        private static readonly int UseManualLuminanceBoundsId =
+            Shader.PropertyToID(
+                "_UseManualLuminanceBounds"
+            );
+
+        private static readonly int LuminanceBoundsTextureId =
+            Shader.PropertyToID("_AsciiLuminanceBounds");
+
         private static readonly int CellEdgeHistogramTextureId =
             Shader.PropertyToID(
                 "_AsciiCellEdgeDirectionalHistogram"
@@ -211,6 +248,12 @@ public sealed class AsciiRendererFeature
 
         private Material material;
         private AsciiBenchmarkRenderMode benchmarkRenderMode;
+
+        private bool luminanceBoundsReadbackRequested;
+        private bool luminanceBoundsReadbackInFlight;
+        private bool hasReportedLuminanceBounds;
+        private Vector2 reportedLuminanceBounds;
+        private uint luminanceBoundsReportVersion;
 
 
         private sealed class CellEdgeAggregationPassData
@@ -224,7 +267,77 @@ public sealed class AsciiRendererFeature
         {
             public TextureHandle cellTexture;
             public TextureHandle edgeHistogram;
+            public TextureHandle luminanceBounds;
+            public bool usesAutomaticLuminanceBounds;
             public Material material;
+        }
+
+
+        private sealed class LuminanceAsciiPassData
+        {
+            public TextureHandle cellTexture;
+            public TextureHandle luminanceBounds;
+            public Material material;
+        }
+
+
+        private sealed class LuminanceBoundsReadbackPassData
+        {
+            public TextureHandle luminanceBounds;
+            public AsciiRenderPass owner;
+        }
+
+
+        public bool HasReportedLuminanceBounds =>
+            hasReportedLuminanceBounds;
+
+        public Vector2 ReportedLuminanceBounds =>
+            reportedLuminanceBounds;
+
+        public uint LuminanceBoundsReportVersion =>
+            luminanceBoundsReportVersion;
+
+
+        public void RequestLuminanceBoundsReport()
+        {
+            if (!luminanceBoundsReadbackInFlight)
+            {
+                luminanceBoundsReadbackRequested = true;
+            }
+        }
+
+
+        private void CompleteLuminanceBoundsReadback(
+            AsyncGPUReadbackRequest request
+        )
+        {
+            luminanceBoundsReadbackInFlight = false;
+
+            if (request.hasError)
+            {
+                Debug.LogWarning(
+                    "ASCII luminance-bounds readback failed."
+                );
+                return;
+            }
+
+            var values = request.GetData<float>();
+
+            if (values.Length < 2)
+            {
+                Debug.LogWarning(
+                    "ASCII luminance-bounds readback returned no data."
+                );
+                return;
+            }
+
+            reportedLuminanceBounds = new Vector2(
+                Mathf.Clamp01(values[0]),
+                Mathf.Clamp01(values[1])
+            );
+
+            hasReportedLuminanceBounds = true;
+            ++luminanceBoundsReportVersion;
         }
 
 
@@ -306,6 +419,19 @@ public sealed class AsciiRendererFeature
                     && debugView == (int)AsciiDebugView.Final
                     && material.GetFloat(EnableEdgeGlyphsId) > 0.5f
                 );
+
+            bool usesAutomaticLuminanceBounds =
+                material.GetFloat(
+                    LuminanceMappingModeId
+                ) > 0.5f
+                && material.GetFloat(
+                    UseManualLuminanceBoundsId
+                ) <= 0.5f;
+
+            bool schedulesLuminanceBoundsReadback =
+                cameraData.cameraType == CameraType.Game
+                && luminanceBoundsReadbackRequested
+                && !luminanceBoundsReadbackInFlight;
 
             // The full-resolution branch is only needed for its dedicated
             // diagnostics or for the edge-aware final composite.
@@ -795,6 +921,138 @@ public sealed class AsciiRendererFeature
                 "Analyze ASCII Cells"
             );
 
+            TextureHandle luminanceBoundsTexture = default;
+
+            if (
+                usesAutomaticLuminanceBounds
+                || schedulesLuminanceBoundsReadback
+            )
+            {
+                TextureDesc boundsDescriptor =
+                    new TextureDesc(cellDescriptor)
+                    {
+                        name = "_AsciiCellLuminanceBoundsSeed",
+                        width = cellTextureWidth,
+                        height = cellTextureHeight,
+                        format = GraphicsFormat.R16G16_SFloat,
+                    };
+
+                TextureHandle currentBoundsTexture =
+                    renderGraph.CreateTexture(boundsDescriptor);
+
+                if (!currentBoundsTexture.IsValid())
+                {
+                    return;
+                }
+
+                var seedBoundsParameters =
+                    new RenderGraphUtils.BlitMaterialParameters(
+                        cellTexture,
+                        currentBoundsTexture,
+                        material,
+                        CellLuminanceBoundsSeedPassIndex
+                    );
+
+                renderGraph.AddBlitPass(
+                    seedBoundsParameters,
+                    "Seed Cell Luminance Bounds"
+                );
+
+                int boundsWidth = cellTextureWidth;
+                int boundsHeight = cellTextureHeight;
+
+                while (boundsWidth > 1 || boundsHeight > 1)
+                {
+                    boundsWidth = Mathf.Max(
+                        (boundsWidth + 1) / 2,
+                        1
+                    );
+                    boundsHeight = Mathf.Max(
+                        (boundsHeight + 1) / 2,
+                        1
+                    );
+
+                    TextureDesc reducedBoundsDescriptor =
+                        new TextureDesc(boundsDescriptor)
+                        {
+                            name = "_AsciiReducedLuminanceBounds",
+                            width = boundsWidth,
+                            height = boundsHeight,
+                        };
+
+                    TextureHandle reducedBoundsTexture =
+                        renderGraph.CreateTexture(
+                            reducedBoundsDescriptor
+                        );
+
+                    if (!reducedBoundsTexture.IsValid())
+                    {
+                        return;
+                    }
+
+                    var reduceBoundsParameters =
+                        new RenderGraphUtils.BlitMaterialParameters(
+                            currentBoundsTexture,
+                            reducedBoundsTexture,
+                            material,
+                            CellLuminanceBoundsReducePassIndex
+                        );
+
+                    renderGraph.AddBlitPass(
+                        reduceBoundsParameters,
+                        "Reduce Cell Luminance Bounds"
+                    );
+
+                    currentBoundsTexture =
+                        reducedBoundsTexture;
+                }
+
+                luminanceBoundsTexture = currentBoundsTexture;
+
+                if (schedulesLuminanceBoundsReadback)
+                {
+                    using (
+                        var builder =
+                            renderGraph.AddUnsafePass<
+                                LuminanceBoundsReadbackPassData
+                            >(
+                                "Read Back Luminance Bounds",
+                                out var passData
+                            )
+                    )
+                    {
+                        passData.luminanceBounds =
+                            luminanceBoundsTexture;
+                        passData.owner = this;
+
+                        builder.UseTexture(
+                            passData.luminanceBounds,
+                            AccessFlags.Read
+                        );
+                        builder.AllowPassCulling(false);
+
+                        builder.SetRenderFunc(
+                            static (
+                                LuminanceBoundsReadbackPassData data,
+                                UnsafeGraphContext context
+                            ) =>
+                            {
+                                context.cmd.RequestAsyncReadback(
+                                    data.luminanceBounds,
+                                    0,
+                                    GraphicsFormat.R32G32_SFloat,
+                                    data.owner
+                                        .CompleteLuminanceBoundsReadback
+                                );
+                            }
+                        );
+                    }
+
+                    luminanceBoundsReadbackRequested = false;
+                    luminanceBoundsReadbackInFlight = true;
+                }
+            }
+
             if (rendersFinalComposite)
             {
                 TextureDesc cellEdgeHistogramDescriptor =
@@ -874,6 +1132,10 @@ public sealed class AsciiRendererFeature
                     passData.cellTexture = cellTexture;
                     passData.edgeHistogram =
                         cellEdgeHistogramTexture;
+                    passData.luminanceBounds =
+                        luminanceBoundsTexture;
+                    passData.usesAutomaticLuminanceBounds =
+                        usesAutomaticLuminanceBounds;
                     passData.material = material;
 
                     builder.UseTexture(
@@ -885,6 +1147,14 @@ public sealed class AsciiRendererFeature
                         passData.edgeHistogram,
                         AccessFlags.Read
                     );
+
+                    if (passData.usesAutomaticLuminanceBounds)
+                    {
+                        builder.UseTexture(
+                            passData.luminanceBounds,
+                            AccessFlags.Read
+                        );
+                    }
 
                     builder.SetRenderAttachment(
                         destination,
@@ -905,12 +1175,84 @@ public sealed class AsciiRendererFeature
                                 data.edgeHistogram
                             );
 
+                            if (data.usesAutomaticLuminanceBounds)
+                            {
+                                context.cmd.SetGlobalTexture(
+                                    LuminanceBoundsTextureId,
+                                    data.luminanceBounds
+                                );
+                            }
+
                             Blitter.BlitTexture(
                                 context.cmd,
                                 data.cellTexture,
                                 new Vector4(1.0f, 1.0f, 0.0f, 0.0f),
                                 data.material,
                                 CompositeAsciiRendererPassIndex
+                            );
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            if (usesAutomaticLuminanceBounds)
+            {
+                using (
+                    var builder =
+                        renderGraph.AddRasterRenderPass<
+                            LuminanceAsciiPassData
+                        >(
+                            "Render ASCII",
+                            out var passData
+                        )
+                )
+                {
+                    passData.cellTexture = cellTexture;
+                    passData.luminanceBounds =
+                        luminanceBoundsTexture;
+                    passData.material = material;
+
+                    builder.UseTexture(
+                        passData.cellTexture,
+                        AccessFlags.Read
+                    );
+                    builder.UseTexture(
+                        passData.luminanceBounds,
+                        AccessFlags.Read
+                    );
+
+                    builder.SetRenderAttachment(
+                        destination,
+                        0,
+                        AccessFlags.Write
+                    );
+
+                    builder.AllowGlobalStateModification(true);
+
+                    builder.SetRenderFunc(
+                        static (
+                            LuminanceAsciiPassData data,
+                            RasterGraphContext context
+                        ) =>
+                        {
+                            context.cmd.SetGlobalTexture(
+                                LuminanceBoundsTextureId,
+                                data.luminanceBounds
+                            );
+
+                            Blitter.BlitTexture(
+                                context.cmd,
+                                data.cellTexture,
+                                new Vector4(
+                                    1.0f,
+                                    1.0f,
+                                    0.0f,
+                                    0.0f
+                                ),
+                                data.material,
+                                AsciiRendererPassIndex
                             );
                         }
                     );

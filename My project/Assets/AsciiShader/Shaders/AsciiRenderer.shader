@@ -23,6 +23,37 @@ Shader "ASCII Shader/Renderer"
             Color
         ) = (0.09383891, 0.078431375, 0.078431375, 1.0)
 
+        [Header(Luminance Adaptation)]
+        [Enum(Stable, 0, AdaptiveStaticImages, 1)]
+        _LuminanceMappingMode (
+            "Luminance Mapping",
+            Float
+        ) = 0.0
+
+        [HideInInspector]
+        _UseManualLuminanceBounds (
+            "Development: Use Manual Bounds",
+            Float
+        ) = 0.0
+
+        [HideInInspector]
+        _LuminanceBlackPoint (
+            "Development: Manual Black Point",
+            Range(0.0, 1.0)
+        ) = 0.0
+
+        [HideInInspector]
+        _LuminanceWhitePoint (
+            "Development: Manual White Point",
+            Range(0.0, 1.0)
+        ) = 1.0
+
+        [HideInInspector]
+        _LuminanceAdaptationStrength (
+            "Development: Adaptation Strength",
+            Range(0.0, 1.0)
+        ) = 1.0
+
         [Header(Edge Selection)]
         _CellEdgeMinimumDominantPixels (
             "Minimum Dominant Pixels",
@@ -104,12 +135,18 @@ Shader "ASCII Shader/Renderer"
         SAMPLER(sampler_EdgeGlyphAtlas);
 
         TEXTURE2D_X(_AsciiCellEdgeDirectionalHistogram);
+        TEXTURE2D_X(_AsciiLuminanceBounds);
 
         CBUFFER_START(UnityPerMaterial)
             float _CellWidth;
             float _CellHeight;
             float _GlyphCount;
             float _EnableEdgeGlyphs;
+            float _LuminanceMappingMode;
+            float _UseManualLuminanceBounds;
+            float _LuminanceBlackPoint;
+            float _LuminanceWhitePoint;
+            float _LuminanceAdaptationStrength;
             float _ColorMode;
             float4 _GlyphColor;
             float4 _BackgroundColor;
@@ -157,6 +194,100 @@ Shader "ASCII Shader/Renderer"
             }
 
             return nonNegativeColor / maximumChannel;
+        }
+
+
+        float2 GetActiveLuminanceBounds()
+        {
+            if (_UseManualLuminanceBounds > 0.5)
+            {
+                return float2(
+                    saturate(_LuminanceBlackPoint),
+                    max(
+                        saturate(_LuminanceWhitePoint),
+                        saturate(_LuminanceBlackPoint)
+                            + 0.0001
+                    )
+                );
+            }
+
+            float2 bounds = LOAD_TEXTURE2D_X(
+                _AsciiLuminanceBounds,
+                int2(0, 0)
+            ).rg;
+
+            bounds.x = saturate(bounds.x);
+            bounds.y = max(
+                saturate(bounds.y),
+                bounds.x + 0.0001
+            );
+
+            return bounds;
+        }
+
+
+        float GetGlyphSelectionLuminance(float luminance)
+        {
+            float originalLuminance = saturate(luminance);
+
+            bool usesManualDevelopmentBounds =
+                _UseManualLuminanceBounds > 0.5;
+            bool usesAdaptiveStaticMapping =
+                _LuminanceMappingMode > 0.5;
+
+            if (
+                !usesManualDevelopmentBounds
+                && !usesAdaptiveStaticMapping
+            )
+            {
+                return originalLuminance;
+            }
+
+            float2 bounds = GetActiveLuminanceBounds();
+
+            float remappedLuminance = saturate(
+                (
+                    originalLuminance
+                    - bounds.x
+                )
+                / (
+                    bounds.y
+                    - bounds.x
+                )
+            );
+
+            float adaptationAmount =
+                usesManualDevelopmentBounds
+                    ? saturate(_LuminanceAdaptationStrength)
+                    : 1.0;
+
+            if (!usesManualDevelopmentBounds)
+            {
+                float glyphCount = max(
+                    round(_GlyphCount),
+                    2.0
+                );
+
+                float oneGlyphStep = rcp(glyphCount);
+                float detectedRange = max(
+                    bounds.y - bounds.x,
+                    0.0
+                );
+
+                float rangeConfidence = smoothstep(
+                    oneGlyphStep,
+                    oneGlyphStep * 2.0,
+                    detectedRange
+                );
+
+                adaptationAmount *= rangeConfidence;
+            }
+
+            return lerp(
+                originalLuminance,
+                remappedLuminance,
+                adaptationAmount
+            );
         }
 
         float4 FullResolutionLuminanceFragment(
@@ -283,6 +414,96 @@ Shader "ASCII Shader/Renderer"
         }
 
 
+        float4 CellLuminanceBoundsSeedFragment(
+            Varyings input
+        ) : SV_Target
+        {
+            UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
+            int2 sourcePixel = int2(input.positionCS.xy);
+
+            float3 cellColor = LOAD_TEXTURE2D_X(
+                _BlitTexture,
+                sourcePixel
+            ).rgb;
+
+            const float3 luminanceWeights = float3(
+                0.2126,
+                0.7152,
+                0.0722
+            );
+
+            float luminance = saturate(
+                dot(cellColor, luminanceWeights)
+            );
+
+            return float4(
+                luminance,
+                luminance,
+                0.0,
+                1.0
+            );
+        }
+
+
+        float4 CellLuminanceBoundsReduceFragment(
+            Varyings input
+        ) : SV_Target
+        {
+            UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
+            uint2 sourceResolution =
+                (uint2)_BlitTexture_TexelSize.zw;
+
+            uint2 sourceStart =
+                (uint2)input.positionCS.xy * 2u;
+
+            float minimumLuminance = 1.0;
+            float maximumLuminance = 0.0;
+
+            [unroll]
+            for (uint y = 0u; y < 2u; ++y)
+            {
+                [unroll]
+                for (uint x = 0u; x < 2u; ++x)
+                {
+                    uint2 sourcePixel =
+                        sourceStart + uint2(x, y);
+
+                    if (
+                        sourcePixel.x >= sourceResolution.x
+                        || sourcePixel.y >= sourceResolution.y
+                    )
+                    {
+                        continue;
+                    }
+
+                    float2 sourceBounds = LOAD_TEXTURE2D_X(
+                        _BlitTexture,
+                        int2(sourcePixel)
+                    ).rg;
+
+                    minimumLuminance = min(
+                        minimumLuminance,
+                        sourceBounds.x
+                    );
+
+                    maximumLuminance = max(
+                        maximumLuminance,
+                        sourceBounds.y
+                    );
+                }
+            }
+
+            return float4(
+                minimumLuminance,
+                maximumLuminance,
+                0.0,
+                1.0
+            );
+        }
+
+
         float4 AsciiRendererFragment(
             Varyings input
         ) : SV_Target
@@ -313,11 +534,17 @@ Shader "ASCII Shader/Renderer"
 
             luminance = saturate(luminance);
 
+            float glyphSelectionLuminance =
+                GetGlyphSelectionLuminance(luminance);
+
             float glyphCount =
                 max(round(_GlyphCount), 2.0);
 
             float glyphIndex = min(
-                floor(luminance * glyphCount),
+                floor(
+                    glyphSelectionLuminance
+                    * glyphCount
+                ),
                 glyphCount - 1.0
             );
 
@@ -349,6 +576,42 @@ Shader "ASCII Shader/Renderer"
                     normalizedGlyphIndex,
                     1.0
                 );
+            }
+
+            if (debugView == 19)
+            {
+                return float4(
+                    glyphSelectionLuminance,
+                    glyphSelectionLuminance,
+                    glyphSelectionLuminance,
+                    1.0
+                );
+            }
+
+            if (debugView == 20)
+            {
+                if (
+                    _LuminanceMappingMode <= 0.5
+                    && _UseManualLuminanceBounds <= 0.5
+                )
+                {
+                    return float4(0.0, 1.0, 0.0, 1.0);
+                }
+
+                float2 activeBounds =
+                    GetActiveLuminanceBounds();
+
+                if (luminance < activeBounds.x)
+                {
+                    return float4(0.0, 0.0, 1.0, 1.0);
+                }
+
+                if (luminance > activeBounds.y)
+                {
+                    return float4(1.0, 0.0, 0.0, 1.0);
+                }
+
+                return float4(0.0, 1.0, 0.0, 1.0);
             }
 
             float2 cellUV =
@@ -1560,13 +1823,19 @@ Shader "ASCII Shader/Renderer"
                 dot(sourceColor.rgb, luminanceWeights)
             );
 
+            float glyphSelectionLuminance =
+                GetGlyphSelectionLuminance(luminance);
+
             float glyphCount = max(
                 round(_GlyphCount),
                 2.0
             );
 
             float luminanceGlyphIndex = min(
-                floor(luminance * glyphCount),
+                floor(
+                    glyphSelectionLuminance
+                    * glyphCount
+                ),
                 glyphCount - 1.0
             );
 
@@ -2158,6 +2427,42 @@ Shader "ASCII Shader/Renderer"
             #pragma target 3.5
             #pragma vertex Vert
             #pragma fragment CompositeAsciiRendererFragment
+
+            ENDHLSL
+        }
+
+
+        Pass
+        {
+            Name "Seed Cell Luminance Bounds"
+
+            Cull Off
+            ZWrite Off
+            ZTest Always
+
+            HLSLPROGRAM
+
+            #pragma target 3.5
+            #pragma vertex Vert
+            #pragma fragment CellLuminanceBoundsSeedFragment
+
+            ENDHLSL
+        }
+
+
+        Pass
+        {
+            Name "Reduce Cell Luminance Bounds"
+
+            Cull Off
+            ZWrite Off
+            ZTest Always
+
+            HLSLPROGRAM
+
+            #pragma target 3.5
+            #pragma vertex Vert
+            #pragma fragment CellLuminanceBoundsReduceFragment
 
             ENDHLSL
         }

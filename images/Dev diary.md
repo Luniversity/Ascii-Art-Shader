@@ -10,7 +10,7 @@ Here is the first test scene I made. It rotates, thats it
 
 ![alt text](<Screenshot 2026-08-10 235510-2.png>)
 
-### Day 1 - Make it exist first
+## Day 1 - Make it exist first
 
 I'll start by making the smallest complete path from camera image -> shader -> back to the screen. So basically creating a shader that does nothing but pass the same information along.
 
@@ -106,7 +106,7 @@ I could stare at this for at least 5 min
 
 I asked codex to generate colour palettes and I can already envision a website that looks like this
 
-### Day 2 - Edge detection
+## Day 2 - Edge detection
 
 What we have now is basically a way to represent different luminance levels using ascii symbols. That is technically what the goal is. But ascii art is not about representing an image in this kind of accurate way. It mostly uses defined edges, to create something a bit more stylized. 
 
@@ -131,7 +131,7 @@ Since we are creating 8x8 cells, we might have multiple contradicting edges insi
 
 Lastly we need not forget that we are aiming for real time processing.
 
-### Day 3 - Edge Detection for real now
+## Day 3 - Edge Detection for real now
 
 The sobel filter would need a full resolution version of our greyscale (luminance) image. The edge detection "materials" would go on a seperate branch. Before downscaling, we grab a full resolution linear luminance texture for later. 
 
@@ -268,7 +268,7 @@ The sobel like before detects the boundaries between the black and white regions
 ![alt text](image-36.png)
 This is the output of the sobel filter. Since the image is just black and white, almost all of the output is of very high gradient magnitude. This view shows the direction of gradient instead, quantized to the 4 directional symbols we have. You can see that the results is pretty good when it comes to the relevant contours. The artifacts are still an issue, but I hope that they get reduced once we downscale. 
 
-### Day 4 - Rendering the edges
+## Day 4 - Rendering the edges
 
 Now that we know where the edges are we have to determine which cell deserve to become an edge symbol, and which should not. 
 Here is the church image's cells. The more edge pixel the cell has, the brighter the cells is.
@@ -328,3 +328,217 @@ Here are the results from all other test images:
 ![alt text](image-42.png)
 ![alt text](image-43.png)
 ![alt text](image-44.png)
+
+## Day 5 - Performance and Optimization
+
+So far the only performance check's I've done is playing the animations in the 3d test environment. All I know is that the performance is "smooth", with no real knowledge on how much resources the calculatios are acctually taking up. 
+
+So lets fix that shall we. 
+
+The shader is first and foremost post-processing, so the game image is already rendered before we start processing it. So all of our work should be added on top of the rendering of the game iteself. 
+
+A lot of the computational work is dependent on the amount of pixels the screen has. Because we need a lot of intermediate steps, we have to read "the screen" many times. We also have to write a full-resolution texture many times, one screen write. 
+
+The reality is a bit more complex than this but it gives me a good understanding of the scale.
+
+Ok so lets go over some important processing steps (not choronological order):
+
+- Convert camera image from colour to luminance
+
+This is relatively simple, we read the screen once, combine the rgb values in a specific way, and then screen write to output the luminance texture.
+
+- Render the final glyph image
+
+This is also relatively simple. We have the tiny glyph textures ready, so the gpu can probably keep most of them close in its cache. Sampling the glyph themselves does not require much complicated math.
+
+- Gaussian blur
+
+The specific gaussian blur I used has two passes: one horizontal and one vertical. Each uses a 5 pixel kernel. So thats equivalent to around 10 screen read in total. We do run two gaussian blurs for the DoG, but since they have the same radius but different weights, we only need to run the blur passes once, and just store the results in two different texture channels. 
+
+The gaussian weights themselves are also a bit complex, since exponentials is more expensive than basic arithmatic. Currently we calculate them every time we need to find the weights, which might be expensive.
+
+- Sobel filter
+
+The kernel for the sobel filter has 8 pixels/values, so thats 8x screen reads, and 1 output write.
+
+- Sobel filter output
+
+This is the most complex texture we handle. The filter outputs a bunch of information, we store it using an RGBA16F format, so 16 bit floats in 4 channels. 
+
+R = horizontal gradient, Gx
+G = vertical gradient, Gy
+B = accepted-edge flag
+A = unused
+
+This is so that the aggregation pass can read them and make a decision on which edge glyph to use. But we are actually allocating more storage space than we need. The accepted-edge flag is derived like this:
+
+`accepted = length(gradient) > epsilon ? 1.0 : 0.0;`
+
+This is a bit extra information since we can derive the same boolean later using informaiton we already have. The alpha channel is already unused, so we really only need 2 channels to convey all the information we need. (less memory use)
+
+### Benchmark results
+
+I created a benchmark that compares three rendeing modes.
+
+1. Basline, no ascii
+2. Luminance-only Ascii
+3. Edge-aware Ascii
+
+Here are the results (GPU):
+
+- Baseline: 0.366 ms
+
+- Luminance-only: 0.458 ms (+0.092 ms compared to baseline)
+
+- Edge-aware: 0.566 ms (+0.108 ms compared to luminance only)
+
+So the complete effect added a total of 0.201 ms. CPU frame time difference was only 0.073 ms. These are very low numbers, but I am on a 9070 XT so these number will increase for an average computer. 
+
+Total frame time difference for the effect should be around 1.2% of a 60FPS target or 2.4% of a 120FPS target.
+
+I also tried to render at 4k, where the complete effect cost (gpu + cpu) increased from 0.22 ms to 1.49 ms in editor. 4k means 4 times the amount of pixels, but the shader took 6.8 times longer to run, so some aspects are scaling worse than expected. 
+
+Overall the shader is quite cheap at 1080p, so there is no rush to optimize. I don't have a specific target for optimization, the initial plan was "real time" so i guess that means 60FPS. 
+
+## Day 6 - Dynamic Luminance Quantization
+
+### The idea 
+One issue I noticed with the portrait test photo was that a lot of areas of the image consisted of blank glyphs, the cells were determined to be too dark so nothing was rendered. You can see that the background, some of the foreground, and the subjects' hair is blank. Wheras in the real photo, those areas range from truly black to important subject areas that happens to be darker. 
+
+![alt text](image-43.png)
+![alt text](image-45.png)
+
+So what is going on here is that the dynamic range of the image is narrower than the entire luminance band we have glyphs for. This photo for instance only has luminance ranges that render out 7 out of 10 glyphs. So the ?, @ and square is never even used. This is not the fault of the image, it was taken at night and just happened to not have strong highlights and strong shadows at the same time. 
+
+So what can we do about this? Ideally we would want to use as many glyphs as possible to represent the image. Maybe we could create a way to force all 10 glyphs to be used at the quantization stage. Lets say luminance is represented continuously from a scale from 0-1. The way we currently quantize luminance is to count the number of glyphs we have (10) and evenly distribute them across the luminance range, so glyph1 would be 0-0.1, glyph2 would be 0.1-0.2 etc. 
+
+This would make sense if we were doing posterization. If we were quantizing colours stylistically, we would want a colour to still be somewhat similar after quantizing. But since we are dealing with ascii glyphs (that are the same colour and luminance to each other) we care less about the absolute luminance and more about the relative luminance. 
+
+So if an image only ranges from 0-0.5 in terms of luminance, maybe we could fit all 10 glyphs inside that range instead. That would mean that we get more available glyphs to render the photo, which would render gradients of luminance better. No more crushed blacks or whites. Also when determining "dynamic range" what we really care about is what the brightest and darkest cell is, not pixel. A single bright pixel existing does not mean that we will need to render out a bright glyph. So what this tell me is that we need to do this calculation on the downscaled luminance image. 
+
+I can also forsee that there could be a general mismatch of luminance across different images. An equally bright area in two photos might be represented by two different glyphs depending on the dynamic range of the image. Is this fine? Artistically I am leaning towards yes since it makes each indivdual image look better, at the cost of consistency. 
+
+We could take our quantization logic even further. Each glyph has a statistical "brightness", a measure of how many lit pixels compared unlit pixels. Our current way of quantizing glyphs assumes that each glyph is evenly distributed in terms of brightness, when in reality the number of lit pixels in each glyph does not increase steadily. (not sure how much of an impact this will have though)
+
+### Remapping Black and White points
+
+The safest first thing to do is a manual check to see if narrowing the luminance band will produce a favourable result. No algorithm that determines exactly where the black and white point is yet.
+
+So basically I added a way to remap each cell's luminance value (without touching the full resolution texture).
+
+Here is the church test image again. You can see that remapping the luminance from 0.0 - 1.0 to 0.0 - 0.5. Changes the output a lot. What the remapping does is essentially saying that any pixels that has luminance above 0.5 is considered 0.5, see the red pixels in the luminance range clipping image. So some pixels is supposed to be brighter but we are clipping the luminance, while the vast majority of pixels are not clipped. Now we have every pixel ranging between 0.0 - 0.5 in luminance, and quantize (evenly still) between that range. 
+
+<p align="center">
+  <img src="image-50.png" width="90%" alt="Luminance range clipping mask">
+  <br>
+  <em>Luminance range clipping: green cells are inside the selected range, while red cells exceed the 0.5 white point.</em>
+</p>
+
+Imagine the histogram of the image pre and post remapping. Before remapping, the pixels had a certain distribution located mostly under 0.5, what we did is that we clipped the pixels above 0.5 and stretched the histogram so that it occupied then entire 0-1 range. 
+
+| Original cell luminance | Remapped cell luminance |
+|:---:|:---:|
+| <img src="image-46.png" width="100%" alt="Original church cell luminance"> | <img src="image-48.png" width="100%" alt="Remapped church cell luminance"> |
+| Original 0–1 mapping | The 0–0.5 range stretched across 0–1 |
+
+Now, pixels that were close to 0.5 in luminance gets assigned the brightest glyphs, instead of a medium bright glyph. You can see that the background clouds have some brighter spots now. 
+
+Areas that was previously towards the darker side pre-remapping gets brigher. You can see that the church itself was mostly made of blank glyphs but now has some texture to it.
+
+| Without luminance remapping | With luminance remapping |
+|:---:|:---:|
+| <img src="image-47.png" width="100%" alt="Church ASCII without remapping"> | <img src="image-49.png" width="100%" alt="Church ASCII with remapping"> |
+| Much of the church selects blank or sparse glyphs | More of the glyph ramp represents the church |
+
+Note: the 0.5 white point I chose was arbitrary, we should ideally find a good way of determining a white and black point automatically. 
+
+### Automatically determining black and white points
+
+An important distintinction to make is between the literal brightest/darkest cells in the image and the darkest/brightest cells that are useful for describing the image.
+
+We could just find the literal min and max luminance of the image. So if an image only ranges between 0.05-0.65 we remap that to 0-1. But that would leave us vulnerable to outlying cells. Like what if a bright light sources at luminance = 0.95 exists? that would limit our remapping even if the rest of the image if fairly dark. 
+
+A better way would be to look at percentiles. But that requires sorting and I kinda just want to see how well the dumb version works first. 
+
+The obvious way of finding the min and max is to let the cpu do the work. It would involve sending the cell texture to the cpu, then asking it to run something akin to:
+
+`minimum = Mathf.Min(minimum, luminance);`
+
+`maximum = Mathf.Max(maximum, luminance);`
+
+But that would involve us transferring the result of previous processing to the cpu and making sure they syncronize. So we should keep the work on the GPU. But on the GPU we can't just ask it to loop through the image and keep track of min and max like we do on the CPU, we have to tell it to work in parallel. 
+
+The plan is to then use a reduction chain. The grid of cells we have is 240x135 (1080p). We send out a GPU thread for each 2x2 group of cells and it does its own min or max calculation, and outputs its resulting pixel. A lot of these threads run in parallel. From this we get an downscaled texture with all the "winners", we then just keep running this until we are left with a single cell, which becomes our brightes or darkest cell. This is a very dumb but fast way of finding the min or max, we only care about the value of the cell, not the position, so its okay. 
+
+I ran the automatic black and white bonds on every test scenario I had, and the results were interesting. All of the images were bound around 0-0.5, coincidentally what I tested with, while the 3d environment's range did not deviate much from 0-1. So if the test images I have is anything to go with, then we are effectively doubling the dynamic range. A dark area with a luminance of 0.1 effectively becomes 0.2 after remapping. 
+
+(Since the automatic bounds detection gives the same bounds as my testing, see the previous church image for reference)
+
+### Preventing excess quantization
+
+Lets say an image is just one shade of grey. I it would then be dumb to start analyzing dynamic range bounds and remap the luminance. We would be dividing a tiny luminance range to fit 10 glyphs, while in reality the image is just "one colour". So we need a minimum range where we actually decide to remap stuff. 
+
+A convenient minimum we could use is `minimum_range = 1 / glyph_count`. Which for me is 0.1. So if an image only ranges enough to need one (or less) glyphs to represent everything, we just skip remapping and keep the 0.1 range. That would result in the image becoming only one glyph. 
+
+The issue with that is if an animation crosses the boundary and goes from 0.099 to 0.101, we would get a weird jump. So we will need to ease it in a bit:
+
+    range <= one glyph step:
+        use fixed mapping
+
+    range >= two glyph steps:
+        use full automatic remapping
+
+    between them:
+        gradually blend from fixed to automatic
+
+### Problems when introducing motion
+
+The automatic bounds worked well for static images, but video games introduce another requirement: the result must remain stable between frames.
+
+The shader currently calculates new black and white points independently for every frame. This means that a bright or dark object entering the camera can change the luminance mapping for the entire image.
+
+For example, imagine that a cell has a luminance of 0.25:
+
+    Frame A bounds: 0.0–0.5
+    Remapped luminance: 0.5
+
+    Frame B bounds: 0.0–1.0
+    Remapped luminance: 0.25
+
+The cell itself did not change, but a bright object entered somewhere else and increased the detected white point. The unchanged cell can suddenly move several positions down the glyph ramp.
+
+Because glyph selection is quantized, this does not appear as a subtle brightness adjustment. Many cells can suddenly switch symbols at the same time. During testing, this appeared as flickering and unintended changes across otherwise stable parts of the image. The luminance bounds are global values, so a local change can affect every cell on screen.
+
+So how do we fix this?
+
+One option would be to smooth the detected bounds over time. Instead of immediately using the newest bounds, we would gradually move toward them.
+
+This would reduce sudden jumps, but the shader would temporarily use information from older frames. Highlights could remain clipped while the white point catches up, and camera cuts could briefly use the bounds from the previous shot. This improves stability at the cost of responsiveness and accuracy.
+
+Another option would be percentile bounds. Instead of using the literal brightest and darkest cells, we could ignore a small percentage of extreme cells.
+
+The ignored cells would still become the brightest or darkest glyphs, but they would no longer control the mapping of the rest of the image. This would probably reduce the flickering caused by small highlights. However, we would have to decide how many cells are allowed to be ignored. A genuinely important highlight could be treated as an outlier, and different scenes might prefer different percentiles.
+
+We also considered deadbands and requiring an extreme value to remain for several frames before accepting it. These approaches can reject small or temporary changes, but they either delay real changes or still allow larger jumps.
+
+Every solution introduces some form of lag, ignored information, or arbitrary threshold.
+
+### Final Decision :(
+    
+For animated content, using every glyph is less important than preserving stable and accurate motion.
+
+Because of this, the default real-time mode will keep the original fixed 0–1 luminance mapping. A cell with the same luminance will continue selecting the same glyph regardless of what enters another part of the screen.
+
+Automatic min/max remapping will remain available for static images. The photographs consistently benefited from the expanded range, and static images do not suffer from temporal flickering.
+
+The public shader therefore has two modes:
+
+Stable: fixed luminance mapping intended for games and animation
+
+Adaptive Static Images: automatic min/max remapping intended for photographs
+
+Stable is the default. The shader does not try to detect whether the source is moving; the mode represents the intended use.
+
+This changes the goal slightly. We are no longer trying to force every frame to use the complete glyph atlas. We use more of the ramp when it can be done safely, but temporal stability takes priority for real-time rendering.
+
+A future alternative could be an atlas containing more glyph densities. A larger fixed ramp would provide more tonal variety within a narrow luminance range without changing the mapping between frames.
