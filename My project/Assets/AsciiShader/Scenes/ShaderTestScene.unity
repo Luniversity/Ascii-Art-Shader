@@ -470,7 +470,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &159932295
 Transform:
   m_ObjectHideFlags: 0
@@ -647,7 +647,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: -300, y: 0}
+  m_SizeDelta: {x: -600, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &378254298
 MonoBehaviour:
@@ -940,7 +940,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &721008027
 RectTransform:
   m_ObjectHideFlags: 0
@@ -958,7 +958,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: -300, y: 0}
+  m_SizeDelta: {x: -600, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &721008028
 MonoBehaviour:
@@ -1253,7 +1253,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &835686807
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1755,7 +1755,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1065876640
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2683,7 +2683,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!23 &1752844381
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -2933,7 +2933,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!23 &1920218314
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -3038,6 +3038,7 @@ GameObject:
   - component: {fileID: 2100001001}
   - component: {fileID: 2100001002}
   - component: {fileID: 2100001003}
+  - component: {fileID: 2100001004}
   m_Layer: 0
   m_Name: ASCII Performance Benchmark
   m_TagString: Untagged
@@ -3090,6 +3091,22 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AsciiShader.AsciiLuminanceBoundsDiagnostics
   rendererFeature: {fileID: 3761993456299076309, guid: f288ae1f4751b564a96ac7587541f7a2, type: 2}
   showOverlay: 1
+--- !u!114 &2100001004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100001000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 25a7cb24441e4c45a3a98c1e5f859d63, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AsciiShader.AsciiReShadeComparisonControls
+  rendererFeature: {fileID: 3761993456299076309, guid: f288ae1f4751b564a96ac7587541f7a2, type: 2}
+  startWithRawUnityOutputInPlayer: 1
+  showOverlay: 1
+  toggleKey: 283
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

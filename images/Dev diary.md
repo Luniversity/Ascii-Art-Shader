@@ -542,3 +542,42 @@ Stable is the default. The shader does not try to detect whether the source is m
 This changes the goal slightly. We are no longer trying to force every frame to use the complete glyph atlas. We use more of the ramp when it can be done safely, but temporal stability takes priority for real-time rendering.
 
 A future alternative could be an atlas containing more glyph densities. A larger fixed ramp would provide more tonal variety within a narrow luminance range without changing the mapping between frames.
+
+## Day 7 - ReShade porting
+
+Ok I have never touched reshade before, I have only downloaded it to use a preset someone made. Lets see how this goes. 
+
+This is as far as my ReShade experience gets me for free:
+
+![reshade overlay on build](image-51.png)
+
+ReShade effects are written in .fx files using a language similar to HLSL. Instead of using Unity C# and Render Graph to schedule the work, the effect file declares its own textures, shader passes and technique. Which is kind of nice, working on the renderer feature was a pain. 
+
+Before testing real games, I used a Windows build of the Unity test environment as a controlled ReShade host. The actual port of the algorithm was built back up in stages:
+
+1. cell sampling and luminance glyphs
+
+2. glyph atlas rendering
+
+3. color modes
+
+4. full-resolution luminance and Sobel
+
+5. Gaussian and Difference-of-Gaussians preprocessing
+
+5. directional edge classification
+
+7. edge glyph rendering and the final composite
+
+There was one issue when I tried to port over the algorithm. The ReShade result had the correct structure, but it consistently selected brighter and denser glyphs than Unity. The problem was not the cell grid, averaging or quantization. ReShade was reading the game’s final sRGB backbuffer, while the Unity implementation performed its calculations using linear color values.
+
+sRGB values make most midtones numerically brighter. If those values are used directly for luminance calculations, cells move further up the glyph ramp.
+
+The solution was to convert every source pixel from sRGB to linear before it contributes to the cell average. After adding this conversion, the ReShade and Unity glyph selections became basically identical. 
+
+![alt text](image-55.png)
+
+Even the "Made with unity" screen was made of Asciis now that the entire build was affected by the shader.
+
+### Using the Shader in actual games
+

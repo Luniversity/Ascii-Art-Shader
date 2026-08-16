@@ -70,6 +70,9 @@ public sealed class AsciiRendererFeature
     private AsciiBenchmarkRenderMode benchmarkRenderMode =
         AsciiBenchmarkRenderMode.MaterialSettings;
 
+    [NonSerialized]
+    private bool hostRenderingDisabled;
+
 
     internal Material BenchmarkMaterial => settings.material;
 
@@ -109,6 +112,12 @@ public sealed class AsciiRendererFeature
     }
 
 
+    internal void SetHostRenderingDisabled(bool disabled)
+    {
+        hostRenderingDisabled = disabled;
+    }
+
+
     public override void Create()
     {
         renderPass = new AsciiRenderPass
@@ -129,10 +138,15 @@ public sealed class AsciiRendererFeature
             return;
         }
 
-        if (
+        AsciiBenchmarkRenderMode effectiveRenderMode =
             benchmarkRenderMode
-            == AsciiBenchmarkRenderMode.Disabled
-        )
+            != AsciiBenchmarkRenderMode.MaterialSettings
+                ? benchmarkRenderMode
+                : hostRenderingDisabled
+                    ? AsciiBenchmarkRenderMode.Disabled
+                    : AsciiBenchmarkRenderMode.MaterialSettings;
+
+        if (effectiveRenderMode == AsciiBenchmarkRenderMode.Disabled)
         {
             return;
         }
@@ -151,7 +165,7 @@ public sealed class AsciiRendererFeature
         renderPass.renderPassEvent = settings.injectionPoint;
         renderPass.Setup(
             settings.material,
-            benchmarkRenderMode
+            effectiveRenderMode
         );
 
         renderer.EnqueuePass(renderPass);
