@@ -125,6 +125,19 @@ uniform int ColorMode <
         "Cell Tint\0";
 > = 1;
 
+uniform float CellTintValueInfluence <
+    ui_category = "Appearance";
+    ui_label = "Cell Tint Value Influence";
+    ui_tooltip =
+        "Controls how much source Value affects tinted glyph brightness. "
+        "Zero reproduces the original full-Value tint; one uses the cell's "
+        "complete source Value.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 1.0;
+    ui_step = 0.01;
+> = 0.65;
+
 uniform float3 PaletteGlyphColor <
     ui_category = "Appearance";
     ui_label = "Glyph Color";
@@ -556,10 +569,29 @@ float3 CalculateCellTint(float3 sourceColor)
 
     if (maximumChannel <= 0.0001)
     {
-        return float3(1.0, 1.0, 1.0);
+        float blackCellValue = lerp(
+            1.0,
+            0.0,
+            saturate(CellTintValueInfluence)
+        );
+
+        return float3(
+            blackCellValue,
+            blackCellValue,
+            blackCellValue
+        );
     }
 
-    return nonNegativeColor / maximumChannel;
+    float3 fullValueTint =
+        nonNegativeColor / maximumChannel;
+
+    float influencedValue = lerp(
+        1.0,
+        saturate(maximumChannel),
+        saturate(CellTintValueInfluence)
+    );
+
+    return fullValueTint * influencedValue;
 }
 
 struct CellEdgeDirectionSummary

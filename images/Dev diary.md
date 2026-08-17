@@ -649,3 +649,35 @@ This creates a small safe region between appearing and disappearing. For example
 The shader also remembers the previous edge direction. A new direction must beat the retained direction by three votes before the glyph is allowed to change. This prevents small variations in the directional histogram from repeatedly swapping between -, |, / and \
 
 This is not enough for history to preserve an edge on its own. The current frame must still contain enough evidence supporting it. If the edge actually disappears, the stored edge is removed instead of leaving a trail.
+
+### Cell tint improvements
+
+Next I wanted to address the Cell tint colour mode. It was initially added for fun to make the glyphs have the colours of the objects behind it. The original Cell Tint mode only cared about the general colour of the cell. It divided the colour by its brightest RGB channel, which preserved its hue and saturation but always forced its HSV Value to 1.
+
+This made sense since hue and saturation belonged to the tint of the glyph, while the luminance (value) belonged to the glyph density. We already represent darker and brigher areas with different glyphs, so making the glyph's colour brighter or darker felt redundant. 
+
+However with the shader in action it often felt like the colours were too intense, especially in darker areas. The contrast between the fully bright glyphs and the blank glyphs was stark, making it hard on the eyes. 
+
+To improve this, I added a Value Influence setting. It blends between the original full-Value colour and the actual Value of the source cell.
+
+    0.0 = original full-Value tint
+    1.0 = complete source-cell Value
+
+Using the complete source Value was too strong because glyph density was already trying to represent the same luminance. Dark glyphs became difficult to see and too much colour detail disappeared.
+
+Values around 0.6–0.7 produced the best artistic result, with 0.65 being a good general setting. It allows the source Value to affect the colour without completely replacing the work done by glyph density.
+
+The two extremes show the tradeoff between colour visibility and softer contrast:
+
+| Value Influence: 0.0 | Value Influence: 1.0 |
+|:---:|:---:|
+| <img src="image-63.png" width="100%" alt="Cell Tint with no source Value influence"> | <img src="image-64.png" width="100%" alt="Cell Tint using complete source Value"> |
+| Every glyph uses full Value, preserving detail but producing harsh colours. | Dark glyphs blend into the background, but too much colour detail is lost. |
+
+The chosen compromise keeps much of the softer contrast without losing as much detail:
+
+| Value Influence: 0.65 |
+|:---:|
+| <img src="image-65.png" width="100%" alt="Cell Tint with the chosen 0.65 Value influence"> |
+| Dark areas are calmer while foreground colours and important details remain readable. |
+
