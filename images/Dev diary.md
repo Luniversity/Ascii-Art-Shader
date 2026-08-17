@@ -579,5 +579,73 @@ The solution was to convert every source pixel from sRGB to linear before it con
 
 Even the "Made with unity" screen was made of Asciis now that the entire build was affected by the shader.
 
-### Using the Shader in actual games
+### Using the Shader in actual games (Expedition 33)
 
+This is good time to show what the shader currently looks like in actual games
+
+| Landscape: Ascii OFF | Landscape: Ascii ON |
+|:---:|:---:|
+| <img src="image-58.png" width="100%" alt="Church ASCII without remapping"> | <img src="image-57.png" width="100%" alt="Church ASCII with remapping"> |
+
+| Portrait: Ascii OFF | Portrait: Ascii ON |
+|:---:|:---:|
+| <img src="image-60.png" width="100%" alt="Church ASCII without remapping"> | <img src="image-59.png" width="100%" alt="Church ASCII with remapping"> |
+
+When it comes to luminance, you can see that the shader is quite good already. Any direct improvements that I can see would come from adding more glyphs. But this is totally usable. 
+
+As for edges, real games introduce a much more complex (sometimes) image for us to analyze, which results in inconsistent edges in some more complex areas. A lot of the edge issues is inevitable when we lose details when downscaling, however there are some things we could do about it (i'll discuss this later).
+
+Using this shader in an actual game introduces some more issues, such as flickering/a noisy output. I dealt with potential visual artifacts like this when doing dynamic luminance quantizing (it was the reason it was scrapped). However in here, flickering is substantial even when nothing is visually changing. 
+
+The test images from e33 were captured using the in game photo mode, where all animations were paused, yet the ascii output was still noisy. This is more of a problem since nothing is happening inside the game, yet the shader percieves a lot of "movement". 
+
+I'll compile all the issues and potential improvements here:
+
+- Flickering/Noisy output, even when there is any animation. We should find a way to prevent this, or smooth the output to make it less harsh. We need also make sure that any measures we take against noise should not come at the expense of real animations.
+
+- The cell tint colour mode might need an upgrade. Currently the colours are way too harsh, since they have full saturation and luminance. We need a nuanced upgrade that improves colour accuracy, and takes the luminance of the glyph colour and the luminance of the cell's colour into account. Currently we disregard luminance and saturation, and rely on the density of the glyph to fake luminance, that might not be enough now that we are working with a detailed game world. We can discuss what specifically to try later.
+
+- Edge detection struggling in certain areas. We can't make edges perfect with limited detail, but we can now use the depth buffer to inform our choices for edges. Adding more ways of detecting edges (and maybe tuning down our current edge detection) might improve edge detection as a whole.
+
+- A stylistic improvment would be to only draw edges within a certain distance of the camera. This way characters and detailed close up objects gets defined edges, while the background turns more smooth. 
+
+- Another improvement is to control the opacity of the glyphs. We could fade out glyphs that were further away from the cameras. 
+
+- I also have ideas on what other effects that might work well with this shader. But we can think about that later. 
+
+More Images of Lune:
+![alt text](image-61.png)
+![alt text](image-62.png)
+
+## Day 8 
+
+### Temporal Stability
+
+A lot of the noise probably comes from rendering techniques like TAA and upscaling. You cant avoid these things in modern games so we have to deal with it. These methods deliverately change or jitter pixels between frames, however the changes are so small that you normall cant see them. But our shader makes a lot of decision based on hard thresholds, so the jitter will sometimes cross the threshold between frames, creating noise.
+
+A tiny luminance change can move a cell across the boundary between two glyphs. Edge detection is even more sensitive. A small change can alter the binary DoG result, which changes the directional votes inside a cell. That cell can then switch between being an edge and not being an edge, or switch between two edge directions.
+
+The final candidate mask is binary, so a small change in a few source pixels can change an entire 8x8 cell. This made the edge noise look much stronger than the noise that caused it.
+
+I really only noticed this now since I have been working on static images of very simple unity animations. So now that we can test in real games we finaly encounted this issue. 
+
+I did not want to average multiple frames together.
+That would basically entail the shader averaging multiple frames to gether to smooth the motion, that would reduce the noise but would also blur movement and make the shader just slower overall to react to stuyff. 
+
+So instead I created a seperate requirements for edges depending on whether the previous frame was an edge or not. 
+
+Creating a new edge has fairly strict requirements:
+
+    Entry support: 8 pixels
+    Entry dominance: 0.65
+
+Once an edge exists, it is allowed to remain with slightly weaker evidence:
+
+    Retention support: 6 pixels
+    Retention dominance: 0.3
+
+This creates a small safe region between appearing and disappearing. For example, an edge that fluctuates between seven and eight supporting pixels no longer repeatedly turns on and off. It must reach eight pixels to appear, but once it exists it can remain until its support falls below six.
+
+The shader also remembers the previous edge direction. A new direction must beat the retained direction by three votes before the glyph is allowed to change. This prevents small variations in the directional histogram from repeatedly swapping between -, |, / and \
+
+This is not enough for history to preserve an edge on its own. The current frame must still contain enough evidence supporting it. If the edge actually disappears, the stored edge is removed instead of leaving a trail.

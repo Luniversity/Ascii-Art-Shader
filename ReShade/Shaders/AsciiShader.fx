@@ -69,6 +69,20 @@ texture AsciiCellEdgeHistogramTexture
     Format = RGBA16F;
 };
 
+texture AsciiCellEdgeStateTexture
+{
+    Width = ASCII_CELL_TEXTURE_WIDTH;
+    Height = ASCII_CELL_TEXTURE_HEIGHT;
+    Format = RGBA8;
+};
+
+texture AsciiPreviousCellEdgeStateTexture
+{
+    Width = ASCII_CELL_TEXTURE_WIDTH;
+    Height = ASCII_CELL_TEXTURE_HEIGHT;
+    Format = RGBA8;
+};
+
 texture GlyphAtlasTexture <
     source = "GlyphAtlas.png";
 >
@@ -143,6 +157,15 @@ uniform bool EnableEdgeGlyphs <
     ui_type = "checkbox";
 > = true;
 
+uniform bool EnableTemporalEdgeStability <
+    ui_category = "Appearance";
+    ui_label = "Enable Temporal Edge Stability";
+    ui_tooltip =
+        "Reduce edge flicker by retaining well-supported cell edges and "
+        "resisting uncertain direction changes.";
+    ui_type = "checkbox";
+> = true;
+
 uniform int InputColorSpace <
     ui_category = "Compatibility";
     ui_category_closed = true;
@@ -181,11 +204,16 @@ uniform int DebugView <
         "Edge Sobel Magnitude\0"
         "Edge Sobel Direction\0"
         "Cell Edge Pixel Count\0"
-        "Cell Edge Dominant Support\0"
-        "Cell Edge Dominance\0"
+        "Cell Edge Support Margin\0"
+        "Cell Edge Dominance Margin\0"
         "Cell Edge Dominant Direction\0"
         "Cell Edge Candidate Mask\0"
-        "Edge Only ASCII\0";
+        "Edge Only ASCII\0"
+        "Stabilized Candidate Mask\0"
+        "Stabilized Dominant Direction\0"
+        "Temporal Intervention Mask\0"
+        "Stabilized Edge Only ASCII\0"
+        "Temporal History Validity\0";
 > = 4;
 
 uniform float SobelMagnitudeDisplayScale <
@@ -256,8 +284,12 @@ uniform float DoGThreshold <
 > = 0.005;
 
 uniform float CellEdgeMinimumDominantPixels <
-    hidden = true;
+    ui_category = "Edge Classification - Advanced";
+    ui_category_closed = true;
     ui_label = "Minimum Dominant Pixels";
+    ui_tooltip =
+        "Votes required in a cell's winning direction before a new edge "
+        "candidate can appear.";
     ui_type = "slider";
     ui_min = 0.0;
     ui_max = 64.0;
@@ -265,13 +297,54 @@ uniform float CellEdgeMinimumDominantPixels <
 > = 8.0;
 
 uniform float CellEdgeMinimumDominance <
-    hidden = true;
+    ui_category = "Edge Classification - Advanced";
+    ui_category_closed = true;
     ui_label = "Minimum Dominance";
+    ui_tooltip =
+        "Required fraction of accepted contour pixels that must support "
+        "the winning direction.";
     ui_type = "slider";
     ui_min = 0.0;
     ui_max = 1.0;
     ui_step = 0.01;
-> = 0.5;
+> = 0.65;
+
+uniform float TemporalEdgeRetentionSupport <
+    ui_category = "Temporal Stability - Advanced";
+    ui_category_closed = true;
+    ui_label = "Temporal Retention Support";
+    ui_tooltip =
+        "Current votes required to retain a previously displayed edge.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 64.0;
+    ui_step = 1.0;
+> = 6.0;
+
+uniform float TemporalEdgeRetentionDominance <
+    ui_category = "Temporal Stability - Advanced";
+    ui_category_closed = true;
+    ui_label = "Temporal Retention Dominance";
+    ui_tooltip =
+        "Current directional dominance required to retain a previous edge.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 1.0;
+    ui_step = 0.01;
+> = 0.3;
+
+uniform float TemporalEdgeDirectionSwitchMargin <
+    ui_category = "Temporal Stability - Advanced";
+    ui_category_closed = true;
+    ui_label = "Temporal Direction Switch Margin";
+    ui_tooltip =
+        "Extra votes a new direction needs over the retained direction "
+        "before its glyph can replace it.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 64.0;
+    ui_step = 1.0;
+> = 3.0;
 
 sampler AsciiCellColor
 {
@@ -348,6 +421,30 @@ sampler AsciiEdgeEvidence
 sampler AsciiCellEdgeHistogram
 {
     Texture = AsciiCellEdgeHistogramTexture;
+
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = POINT;
+};
+
+sampler AsciiCellEdgeState
+{
+    Texture = AsciiCellEdgeStateTexture;
+
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = POINT;
+};
+
+sampler AsciiPreviousCellEdgeState
+{
+    Texture = AsciiPreviousCellEdgeStateTexture;
 
     AddressU = CLAMP;
     AddressV = CLAMP;
@@ -609,6 +706,166 @@ CellEdgeClassification ClassifyCellEdge(
     return classification;
 }
 
+float GetDirectionVoteCount(
+    float4 directionCounts,
+    int direction
+)
+{
+    if (direction == 0)
+    {
+        return directionCounts.x;
+    }
+
+    if (direction == 1)
+    {
+        return directionCounts.y;
+    }
+
+    if (direction == 2)
+    {
+        return directionCounts.z;
+    }
+
+    return directionCounts.w;
+}
+
+int DecodeTemporalDirection(float encodedDirection)
+{
+    return int(floor(
+        saturate(encodedDirection) * 3.0 + 0.5
+    ));
+}
+
+float4 CalculateTemporalEdgeState(
+    float4 directionCounts,
+    float sampleCount,
+    float4 previousState
+)
+{
+    CellEdgeClassification currentClassification =
+        ClassifyCellEdge(
+            directionCounts,
+            sampleCount
+        );
+
+    float outputCandidate =
+        currentClassification.isCandidate;
+
+    int outputDirection =
+        currentClassification.dominantDirection;
+
+    bool historyIsValid =
+        previousState.a > 0.999;
+
+    bool previousWasCandidate =
+        historyIsValid
+        && previousState.r > 0.5;
+
+    if (previousWasCandidate)
+    {
+        int previousDirection =
+            DecodeTemporalDirection(previousState.g);
+
+        float previousDirectionCount =
+            GetDirectionVoteCount(
+                directionCounts,
+                previousDirection
+            );
+
+        float totalCount =
+            directionCounts.x
+            + directionCounts.y
+            + directionCounts.z
+            + directionCounts.w;
+
+        float fullCellSampleCount =
+            float(ASCII_CELL_SIZE * ASCII_CELL_SIZE);
+
+        float safeSampleCount = max(
+            sampleCount,
+            1.0
+        );
+
+        float effectiveRetentionSupport =
+            max(TemporalEdgeRetentionSupport, 0.0)
+            * safeSampleCount
+            / fullCellSampleCount;
+
+        float previousDirectionDominance =
+            totalCount > 0.00001
+                ? previousDirectionCount / totalCount
+                : 0.0;
+
+        bool canRetainPrevious =
+            previousDirectionCount
+                >= effectiveRetentionSupport
+            && previousDirectionDominance
+                >= saturate(
+                    TemporalEdgeRetentionDominance
+                );
+
+        bool currentMatchesPrevious =
+            currentClassification.isCandidate > 0.5
+            && currentClassification.dominantDirection
+                == previousDirection;
+
+        float effectiveSwitchMargin =
+            max(
+                TemporalEdgeDirectionSwitchMargin,
+                0.0
+            )
+            * safeSampleCount
+            / fullCellSampleCount;
+
+        bool canSwitchDirection =
+            currentClassification.isCandidate > 0.5
+            && currentClassification.dominantDirection
+                != previousDirection
+            && currentClassification.dominantCount
+                >= previousDirectionCount
+                    + effectiveSwitchMargin;
+
+        if (currentMatchesPrevious)
+        {
+            outputCandidate = 1.0;
+            outputDirection = previousDirection;
+        }
+        else if (canSwitchDirection)
+        {
+            outputCandidate = 1.0;
+            outputDirection =
+                currentClassification.dominantDirection;
+        }
+        else if (canRetainPrevious)
+        {
+            outputCandidate = 1.0;
+            outputDirection = previousDirection;
+        }
+    }
+
+    bool candidateChanged =
+        (outputCandidate > 0.5)
+        != (currentClassification.isCandidate > 0.5);
+
+    bool directionChanged =
+        outputCandidate > 0.5
+        && currentClassification.isCandidate > 0.5
+        && outputDirection
+            != currentClassification.dominantDirection;
+
+    float intervention =
+        candidateChanged || directionChanged
+            ? 1.0
+            : 0.0;
+
+    return float4(
+        outputCandidate,
+        float(outputDirection) / 3.0,
+        intervention,
+        1.0
+    );
+}
+
 float3 GetCellEdgeDirectionDebugColor(int direction)
 {
     if (direction == 0)
@@ -627,6 +884,44 @@ float3 GetCellEdgeDirectionDebugColor(int direction)
     }
 
     return float3(0.4, 0.25, 1.0);
+}
+
+float DisplayThresholdCenteredValue(
+    float value,
+    float threshold,
+    float maximumValue
+)
+{
+    float safeMaximum = max(maximumValue, 0.00001);
+    float clampedThreshold = clamp(
+        threshold,
+        0.0,
+        safeMaximum
+    );
+
+    if (clampedThreshold <= 0.00001)
+    {
+        return value > 0.00001
+            ? 0.5 + 0.5 * saturate(value / safeMaximum)
+            : 0.5;
+    }
+
+    if (value <= clampedThreshold)
+    {
+        return 0.5 * saturate(
+            value / clampedThreshold
+        );
+    }
+
+    float remainingRange =
+        safeMaximum - clampedThreshold;
+
+    return remainingRange > 0.00001
+        ? 0.5 + 0.5 * saturate(
+            (value - clampedThreshold)
+            / remainingRange
+        )
+        : 0.5;
 }
 
 int GetEdgeGlyphIndex(
@@ -649,6 +944,35 @@ int GetEdgeGlyphIndex(
     }
 
     if (classification.dominantDirection == 2)
+    {
+        return 1;
+    }
+
+    return 3;
+}
+
+int GetTemporalEdgeGlyphIndex(float4 temporalState)
+{
+    if (temporalState.r <= 0.5)
+    {
+        return 0;
+    }
+
+    int direction = DecodeTemporalDirection(
+        temporalState.g
+    );
+
+    if (direction == 0)
+    {
+        return 2;
+    }
+
+    if (direction == 1)
+    {
+        return 4;
+    }
+
+    if (direction == 2)
     {
         return 1;
     }
@@ -1126,6 +1450,64 @@ float4 AnalyzeCellEdgeHistogramPS(
     return directionCounts;
 }
 
+float4 StabilizeCellEdgesPS(
+    float4 position : SV_Position,
+    float2 texcoord : TEXCOORD
+) : SV_Target
+{
+    uint2 cellCoordinate = uint2(position.xy);
+
+    float2 cellUV =
+        (float2(cellCoordinate) + 0.5)
+        / float2(
+            ASCII_CELL_TEXTURE_WIDTH,
+            ASCII_CELL_TEXTURE_HEIGHT
+        );
+
+    float4 directionCounts = tex2Dlod(
+        AsciiCellEdgeHistogram,
+        float4(cellUV, 0.0, 0.0)
+    );
+
+    float4 previousState = tex2Dlod(
+        AsciiPreviousCellEdgeState,
+        float4(cellUV, 0.0, 0.0)
+    );
+
+    uint2 sourceOrigin =
+        cellCoordinate * ASCII_CELL_SIZE;
+
+    uint2 sourceEnd = min(
+        sourceOrigin + ASCII_CELL_SIZE,
+        uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
+    );
+
+    uint2 sampleExtent =
+        sourceEnd - sourceOrigin;
+
+    float sampleCount = max(
+        float(sampleExtent.x * sampleExtent.y),
+        1.0
+    );
+
+    return CalculateTemporalEdgeState(
+        directionCounts,
+        sampleCount,
+        previousState
+    );
+}
+
+float4 CopyCellEdgeHistoryPS(
+    float4 position : SV_Position,
+    float2 texcoord : TEXCOORD
+) : SV_Target
+{
+    return tex2Dlod(
+        AsciiCellEdgeState,
+        float4(texcoord, 0.0, 0.0)
+    );
+}
+
 float4 AnalyzeCellPS(
     float4 position : SV_Position,
     float2 texcoord : TEXCOORD
@@ -1251,38 +1633,56 @@ float4 RenderLuminanceAscii(
                 ASCII_CELL_TEXTURE_HEIGHT
             );
 
-        float4 directionCounts = tex2Dlod(
-            AsciiCellEdgeHistogram,
-            float4(cellUV, 0.0, 0.0)
-        );
+        int edgeGlyphIndex = 0;
 
-        uint2 sourceOrigin =
-            cellCoordinate * ASCII_CELL_SIZE;
-
-        uint2 sourceEnd = min(
-            sourceOrigin + ASCII_CELL_SIZE,
-            uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
-        );
-
-        uint2 sampleExtent =
-            sourceEnd - sourceOrigin;
-
-        float sampleCount = max(
-            float(sampleExtent.x * sampleExtent.y),
-            1.0
-        );
-
-        CellEdgeClassification classification =
-            ClassifyCellEdge(
-                directionCounts,
-                sampleCount
+        if (EnableTemporalEdgeStability)
+        {
+            float4 temporalState = tex2Dlod(
+                AsciiCellEdgeState,
+                float4(cellUV, 0.0, 0.0)
             );
 
-        if (classification.isCandidate > 0.5)
+            edgeGlyphIndex =
+                GetTemporalEdgeGlyphIndex(
+                    temporalState
+                );
+        }
+        else
         {
-            int edgeGlyphIndex = GetEdgeGlyphIndex(
+            float4 directionCounts = tex2Dlod(
+                AsciiCellEdgeHistogram,
+                float4(cellUV, 0.0, 0.0)
+            );
+
+            uint2 sourceOrigin =
+                cellCoordinate * ASCII_CELL_SIZE;
+
+            uint2 sourceEnd = min(
+                sourceOrigin + ASCII_CELL_SIZE,
+                uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
+            );
+
+            uint2 sampleExtent =
+                sourceEnd - sourceOrigin;
+
+            float sampleCount = max(
+                float(sampleExtent.x * sampleExtent.y),
+                1.0
+            );
+
+            CellEdgeClassification classification =
+                ClassifyCellEdge(
+                    directionCounts,
+                    sampleCount
+                );
+
+            edgeGlyphIndex = GetEdgeGlyphIndex(
                 classification
             );
+        }
+
+        if (edgeGlyphIndex > 0)
+        {
 
             float2 edgeAtlasUV = float2(
                 (
@@ -1327,7 +1727,10 @@ float4 RenderLuminanceAscii(
     );
 }
 
-float4 RenderEdgeOnlyAscii(uint2 outputPixel)
+float4 RenderEdgeOnlyAscii(
+    uint2 outputPixel,
+    bool useTemporalState
+)
 {
     uint2 cellCoordinate =
         outputPixel / ASCII_CELL_SIZE;
@@ -1339,36 +1742,52 @@ float4 RenderEdgeOnlyAscii(uint2 outputPixel)
             ASCII_CELL_TEXTURE_HEIGHT
         );
 
-    float4 directionCounts = tex2Dlod(
-        AsciiCellEdgeHistogram,
-        float4(cellUV, 0.0, 0.0)
-    );
+    int edgeGlyphIndex = 0;
 
-    uint2 sourceOrigin =
-        cellCoordinate * ASCII_CELL_SIZE;
-
-    uint2 sourceEnd = min(
-        sourceOrigin + ASCII_CELL_SIZE,
-        uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
-    );
-
-    uint2 sampleExtent =
-        sourceEnd - sourceOrigin;
-
-    float sampleCount = max(
-        float(sampleExtent.x * sampleExtent.y),
-        1.0
-    );
-
-    CellEdgeClassification classification =
-        ClassifyCellEdge(
-            directionCounts,
-            sampleCount
+    if (useTemporalState)
+    {
+        float4 temporalState = tex2Dlod(
+            AsciiCellEdgeState,
+            float4(cellUV, 0.0, 0.0)
         );
 
-    int edgeGlyphIndex = GetEdgeGlyphIndex(
-        classification
-    );
+        edgeGlyphIndex = GetTemporalEdgeGlyphIndex(
+            temporalState
+        );
+    }
+    else
+    {
+        float4 directionCounts = tex2Dlod(
+            AsciiCellEdgeHistogram,
+            float4(cellUV, 0.0, 0.0)
+        );
+
+        uint2 sourceOrigin =
+            cellCoordinate * ASCII_CELL_SIZE;
+
+        uint2 sourceEnd = min(
+            sourceOrigin + ASCII_CELL_SIZE,
+            uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
+        );
+
+        uint2 sampleExtent =
+            sourceEnd - sourceOrigin;
+
+        float sampleCount = max(
+            float(sampleExtent.x * sampleExtent.y),
+            1.0
+        );
+
+        CellEdgeClassification classification =
+            ClassifyCellEdge(
+                directionCounts,
+                sampleCount
+            );
+
+        edgeGlyphIndex = GetEdgeGlyphIndex(
+            classification
+        );
+    }
 
     uint2 localPixel =
         outputPixel % ASCII_CELL_SIZE;
@@ -1424,7 +1843,93 @@ float4 DisplayCellColorPS(
 
     if (DebugView == 21)
     {
-        return RenderEdgeOnlyAscii(outputPixel);
+        return RenderEdgeOnlyAscii(
+            outputPixel,
+            false
+        );
+    }
+
+    if (DebugView == 25)
+    {
+        return RenderEdgeOnlyAscii(
+            outputPixel,
+            true
+        );
+    }
+
+    if (DebugView >= 22 && DebugView <= 24)
+    {
+        uint2 cellCoordinate =
+            outputPixel / ASCII_CELL_SIZE;
+
+        float2 cellUV =
+            (float2(cellCoordinate) + 0.5)
+            / float2(
+                ASCII_CELL_TEXTURE_WIDTH,
+                ASCII_CELL_TEXTURE_HEIGHT
+            );
+
+        float4 temporalState = tex2Dlod(
+            AsciiCellEdgeState,
+            float4(cellUV, 0.0, 0.0)
+        );
+
+        if (DebugView == 22)
+        {
+            return float4(
+                temporalState.rrr,
+                1.0
+            );
+        }
+
+        if (DebugView == 23)
+        {
+            float3 directionColor =
+                temporalState.r > 0.5
+                    ? GetCellEdgeDirectionDebugColor(
+                        DecodeTemporalDirection(
+                            temporalState.g
+                        )
+                    )
+                    : float3(0.0, 0.0, 0.0);
+
+            return float4(
+                EncodeAnalysisColor(directionColor),
+                1.0
+            );
+        }
+
+        return float4(
+            temporalState.bbb,
+            1.0
+        );
+    }
+
+    if (DebugView == 26)
+    {
+        uint2 cellCoordinate =
+            outputPixel / ASCII_CELL_SIZE;
+
+        float2 cellUV =
+            (float2(cellCoordinate) + 0.5)
+            / float2(
+                ASCII_CELL_TEXTURE_WIDTH,
+                ASCII_CELL_TEXTURE_HEIGHT
+            );
+
+        float historyIsValid = tex2Dlod(
+            AsciiPreviousCellEdgeState,
+            float4(cellUV, 0.0, 0.0)
+        ).a > 0.999
+            ? 1.0
+            : 0.0;
+
+        return float4(
+            historyIsValid,
+            historyIsValid,
+            historyIsValid,
+            1.0
+        );
     }
 
     if (DebugView == 5)
@@ -1687,22 +2192,16 @@ float4 DisplayCellColorPS(
         if (DebugView == 17)
         {
             float displayedSupport =
-                classification.effectiveMinimumSupport
-                    > 0.00001
-                    ? saturate(
-                        classification.dominantCount
-                        / classification.effectiveMinimumSupport
-                    )
-                    : classification.dominantCount > 0.0
-                        ? 1.0
-                        : 0.0;
+                DisplayThresholdCenteredValue(
+                    classification.dominantCount,
+                    classification.effectiveMinimumSupport,
+                    sampleCount
+                );
 
-            float3 displayValue = EncodeAnalysisColor(
-                float3(
-                    displayedSupport,
-                    displayedSupport,
-                    displayedSupport
-                )
+            float3 displayValue = float3(
+                displayedSupport,
+                displayedSupport,
+                displayedSupport
             );
 
             return float4(displayValue, 1.0);
@@ -1710,12 +2209,19 @@ float4 DisplayCellColorPS(
 
         if (DebugView == 18)
         {
-            float3 displayValue = EncodeAnalysisColor(
-                float3(
-                    classification.dominance,
-                    classification.dominance,
-                    classification.dominance
-                )
+            float displayedDominance =
+                classification.totalCount > 0.00001
+                    ? DisplayThresholdCenteredValue(
+                        classification.dominance,
+                        saturate(CellEdgeMinimumDominance),
+                        1.0
+                    )
+                    : 0.0;
+
+            float3 displayValue = float3(
+                displayedDominance,
+                displayedDominance,
+                displayedDominance
             );
 
             return float4(displayValue, 1.0);
@@ -1851,6 +2357,13 @@ technique AsciiShader
         RenderTarget = AsciiCellEdgeHistogramTexture;
     }
 
+    pass StabilizeCellEdges
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = StabilizeCellEdgesPS;
+        RenderTarget = AsciiCellEdgeStateTexture;
+    }
+
     pass AnalyzeCells
     {
         VertexShader = PostProcessVS;
@@ -1862,5 +2375,12 @@ technique AsciiShader
     {
         VertexShader = PostProcessVS;
         PixelShader = DisplayCellColorPS;
+    }
+
+    pass UpdateCellEdgeHistory
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = CopyCellEdgeHistoryPS;
+        RenderTarget = AsciiPreviousCellEdgeStateTexture;
     }
 }
