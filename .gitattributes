@@ -6,6 +6,13 @@
 # Adapted for this repository, where the Unity project lives in "My project".
 
 * text=auto
+
+# Project documentation and ReShade source use stable line endings.
+*.md                    text eol=lf
+*.fx                    text eol=lf linguist-language=hlsl
+*.gitignore             text eol=lf
+*.gitattributes         text eol=lf
+LICENSE                 text eol=lf
 # Define macros (only works in top-level gitattributes files)
 [attr]binary-file       -diff -merge -text
 [attr]unity-json        eol=lf linguist-language=json

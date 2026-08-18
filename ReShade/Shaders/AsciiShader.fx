@@ -24,6 +24,53 @@
 #define ASCII_EDGE_GLYPH_ATLAS_HEIGHT \
     ASCII_GLYPH_HEIGHT
 
+#define ASCII_GAUSSIAN_SIGMA 2.0
+#define ASCII_GAUSSIAN_RADIUS 2
+#define ASCII_GAUSSIAN_SCALE 1.6
+#define ASCII_DOG_TAU 0.96
+#define ASCII_DOG_THRESHOLD 0.005
+
+#define ASCII_VIEW_OUTPUT 0
+#define ASCII_VIEW_CELL_COLOR 1
+#define ASCII_VIEW_CELL_LUMINANCE 2
+#define ASCII_VIEW_GLYPH_INDEX 3
+#define ASCII_VIEW_GLYPH_ATLAS 4
+#define ASCII_VIEW_FULL_RESOLUTION_LUMINANCE 5
+#define ASCII_VIEW_TAU_DOG_RESPONSE 6
+#define ASCII_VIEW_BINARY_DOG 7
+#define ASCII_VIEW_IMAGE_EVIDENCE_MASK 8
+#define ASCII_VIEW_IMAGE_EVIDENCE_DIRECTION 9
+#define ASCII_VIEW_IMAGE_CELL_PIXEL_COUNT 10
+#define ASCII_VIEW_IMAGE_CELL_SUPPORT 11
+#define ASCII_VIEW_IMAGE_CELL_DOMINANCE 12
+#define ASCII_VIEW_IMAGE_CELL_DIRECTION 13
+#define ASCII_VIEW_IMAGE_CELL_CANDIDATE 14
+#define ASCII_VIEW_IMAGE_EDGE_ONLY 15
+#define ASCII_VIEW_IMAGE_STABILIZED_CANDIDATE 16
+#define ASCII_VIEW_IMAGE_STABILIZED_DIRECTION 17
+#define ASCII_VIEW_IMAGE_TEMPORAL_INTERVENTION 18
+#define ASCII_VIEW_IMAGE_STABILIZED_EDGE_ONLY 19
+#define ASCII_VIEW_LINEARIZED_DEPTH 20
+#define ASCII_VIEW_DEPTH_SOBEL_MAGNITUDE 21
+#define ASCII_VIEW_DEPTH_SOBEL_DIRECTION 22
+#define ASCII_VIEW_DEPTH_PROXIMITY_WEIGHT 23
+#define ASCII_VIEW_DEPTH_WEIGHTED_MAGNITUDE 24
+#define ASCII_VIEW_DEPTH_EVIDENCE_MASK 25
+#define ASCII_VIEW_DEPTH_CELL_PIXEL_COUNT 26
+#define ASCII_VIEW_DEPTH_CELL_SUPPORT 27
+#define ASCII_VIEW_DEPTH_CELL_DOMINANCE 28
+#define ASCII_VIEW_DEPTH_CELL_DIRECTION 29
+#define ASCII_VIEW_DEPTH_CELL_CANDIDATE 30
+#define ASCII_VIEW_DEPTH_EDGE_ONLY 31
+#define ASCII_VIEW_DEPTH_STABILIZED_CANDIDATE 32
+#define ASCII_VIEW_DEPTH_STABILIZED_DIRECTION 33
+#define ASCII_VIEW_DEPTH_TEMPORAL_INTERVENTION 34
+#define ASCII_VIEW_DEPTH_STABILIZED_EDGE_ONLY 35
+#define ASCII_VIEW_COMBINED_EDGE_SOURCE 36
+#define ASCII_VIEW_COMBINED_EDGE_ONLY 37
+#define ASCII_VIEW_PALETTE_SLOT 38
+#define ASCII_VIEW_GENERATED_PALETTE_STRIP 39
+
 #define ASCII_CELL_TEXTURE_WIDTH \
     ((BUFFER_WIDTH + ASCII_CELL_SIZE - 1) / ASCII_CELL_SIZE)
 
@@ -57,13 +104,6 @@ texture AsciiGaussianVerticalTexture
     Width = BUFFER_WIDTH;
     Height = BUFFER_HEIGHT;
     Format = RG16F;
-};
-
-texture AsciiEdgeEvidenceTexture
-{
-    Width = BUFFER_WIDTH;
-    Height = BUFFER_HEIGHT;
-    Format = RGBA16F;
 };
 
 texture AsciiDepthEdgeEvidenceTexture
@@ -509,7 +549,7 @@ uniform int InputColorSpace <
         "Linear\0";
 > = 0;
 
-uniform int DebugView <
+uniform int DiagnosticView <
     ui_category = "Diagnostics";
     ui_category_closed = true;
     ui_label = "Debug View";
@@ -517,21 +557,15 @@ uniform int DebugView <
         "Inspect intermediate stages of the ASCII rendering pipeline.";
     ui_type = "combo";
     ui_items =
+        "ASCII Output\0"
         "Cell Color\0"
         "Luminance\0"
         "Glyph Index\0"
         "Glyph Atlas\0"
-        "ASCII Output\0"
         "Full-Resolution Luminance\0"
-        "Sobel Magnitude\0"
-        "Sobel Direction\0"
-        "Small Gaussian Luminance\0"
-        "Large Gaussian Luminance\0"
-        "Signed DoG\0"
         "Tau-Adjusted DoG Response\0"
         "Binary DoG\0"
         "Edge Evidence Mask\0"
-        "Edge Sobel Magnitude\0"
         "Edge Sobel Direction\0"
         "Cell Edge Pixel Count\0"
         "Cell Edge Support Margin\0"
@@ -543,8 +577,6 @@ uniform int DebugView <
         "Stabilized Dominant Direction\0"
         "Temporal Intervention Mask\0"
         "Stabilized Edge Only ASCII\0"
-        "Temporal History Validity\0"
-        "Raw Device Depth\0"
         "Linearized Depth\0"
         "Depth Sobel Magnitude\0"
         "Depth Sobel Direction\0"
@@ -561,12 +593,11 @@ uniform int DebugView <
         "Stabilized Depth Dominant Direction\0"
         "Depth Temporal Intervention Mask\0"
         "Stabilized Depth Edge Only ASCII\0"
-        "Depth Temporal History Validity\0"
         "Combined Edge Source\0"
         "Combined Edge Only ASCII\0"
         "Palette Slot\0"
         "Generated Palette Strip\0";
-> = 4;
+> = ASCII_VIEW_OUTPUT;
 
 uniform float SobelMagnitudeDisplayScale <
     ui_category = "Diagnostics";
@@ -722,51 +753,6 @@ uniform bool DepthBufferAvailable <
     source = "bufready_depth";
 >;
 
-uniform float GaussianSigma <
-    hidden = true;
-    ui_label = "Gaussian Sigma";
-    ui_type = "slider";
-    ui_min = 0.1;
-    ui_max = 5.0;
-    ui_step = 0.1;
-> = 2.0;
-
-uniform int GaussianRadius <
-    hidden = true;
-    ui_label = "Gaussian Radius";
-    ui_type = "slider";
-    ui_min = 0;
-    ui_max = 8;
-    ui_step = 1;
-> = 2;
-
-uniform float GaussianScale <
-    hidden = true;
-    ui_label = "Gaussian Scale";
-    ui_type = "slider";
-    ui_min = 1.01;
-    ui_max = 3.0;
-    ui_step = 0.01;
-> = 1.6;
-
-uniform float DoGTau <
-    hidden = true;
-    ui_label = "DoG Tau";
-    ui_type = "slider";
-    ui_min = 0.0;
-    ui_max = 1.5;
-    ui_step = 0.001;
-> = 0.96;
-
-uniform float DoGThreshold <
-    hidden = true;
-    ui_label = "DoG Threshold";
-    ui_type = "slider";
-    ui_min = 0.0;
-    ui_max = 0.1;
-    ui_step = 0.001;
-> = 0.005;
-
 uniform float CellEdgeMinimumDominantPixels <
     ui_category = "Edge Classification - Advanced";
     ui_category_closed = true;
@@ -892,7 +878,9 @@ sampler AsciiGaussianVertical
 
 sampler AsciiEdgeEvidence
 {
-    Texture = AsciiEdgeEvidenceTexture;
+    // The horizontal Gaussian result is no longer needed after the vertical
+    // pass, so this texture is reused for the final image-edge gradient.
+    Texture = AsciiGaussianHorizontalTexture;
 
     AddressU = CLAMP;
     AddressV = CLAMP;
@@ -985,6 +973,82 @@ sampler AsciiPreviousDepthCellEdgeState
     MagFilter = POINT;
     MipFilter = POINT;
 };
+
+bool IsCombinedEdgeDiagnostic()
+{
+    return
+        DiagnosticView == ASCII_VIEW_COMBINED_EDGE_SOURCE
+        || DiagnosticView == ASCII_VIEW_COMBINED_EDGE_ONLY;
+}
+
+bool IsImageEdgeDiagnostic()
+{
+    return
+        (
+            DiagnosticView >= ASCII_VIEW_TAU_DOG_RESPONSE
+            && DiagnosticView
+                <= ASCII_VIEW_IMAGE_STABILIZED_EDGE_ONLY
+        )
+        || IsCombinedEdgeDiagnostic();
+}
+
+bool IsDepthEdgeDiagnostic()
+{
+    return
+        (
+            DiagnosticView >= ASCII_VIEW_DEPTH_SOBEL_MAGNITUDE
+            && DiagnosticView
+                <= ASCII_VIEW_DEPTH_STABILIZED_EDGE_ONLY
+        )
+        || (
+            IsCombinedEdgeDiagnostic()
+            && EnableDepthEdges
+        );
+}
+
+bool NeedsImageEdgePipeline()
+{
+    return EnableEdgeGlyphs || IsImageEdgeDiagnostic();
+}
+
+bool NeedsDepthEdgePipeline()
+{
+    return
+        (EnableEdgeGlyphs && EnableDepthEdges)
+        || IsDepthEdgeDiagnostic();
+}
+
+bool NeedsImageTemporalPipeline()
+{
+    bool temporalDiagnostic =
+        DiagnosticView
+            >= ASCII_VIEW_IMAGE_STABILIZED_CANDIDATE
+        && DiagnosticView
+            <= ASCII_VIEW_IMAGE_STABILIZED_EDGE_ONLY;
+
+    return
+        NeedsImageEdgePipeline()
+        && (
+            EnableTemporalEdgeStability
+            || temporalDiagnostic
+        );
+}
+
+bool NeedsDepthTemporalPipeline()
+{
+    bool temporalDiagnostic =
+        DiagnosticView
+            >= ASCII_VIEW_DEPTH_STABILIZED_CANDIDATE
+        && DiagnosticView
+            <= ASCII_VIEW_DEPTH_STABILIZED_EDGE_ONLY;
+
+    return
+        NeedsDepthEdgePipeline()
+        && (
+            EnableTemporalEdgeStability
+            || temporalDiagnostic
+        );
+}
 
 float CalculateLuminance(float3 color)
 {
@@ -2515,9 +2579,9 @@ float LoadBinaryDoG(int2 pixelPosition)
 
     float thresholdResponse =
         gaussianPair.x
-        - DoGTau * gaussianPair.y;
+        - ASCII_DOG_TAU * gaussianPair.y;
 
-    return thresholdResponse >= max(DoGThreshold, 0.0)
+    return thresholdResponse >= ASCII_DOG_THRESHOLD
         ? 1.0
         : 0.0;
 }
@@ -2542,6 +2606,15 @@ float4 AnalyzeFullResolutionLuminancePS(
     float2 texcoord : TEXCOORD
 ) : SV_Target
 {
+    if (
+        !NeedsImageEdgePipeline()
+        && DiagnosticView
+            != ASCII_VIEW_FULL_RESOLUTION_LUMINANCE
+    )
+    {
+        return 0.0;
+    }
+
     uint2 sourcePixel = uint2(position.xy);
 
     float2 sourceUV =
@@ -2560,80 +2633,32 @@ float4 AnalyzeFullResolutionLuminancePS(
     return float4(luminance, 0.0, 0.0, 1.0);
 }
 
-float2 CalculateFullResolutionSobel(
-    int2 pixelPosition
-)
-{
-    float l00 = LoadFullResolutionLuminance(
-        pixelPosition + int2(-1, -1)
-    );
-
-    float l10 = LoadFullResolutionLuminance(
-        pixelPosition + int2(0, -1)
-    );
-
-    float l20 = LoadFullResolutionLuminance(
-        pixelPosition + int2(1, -1)
-    );
-
-    float l01 = LoadFullResolutionLuminance(
-        pixelPosition + int2(-1, 0)
-    );
-
-    float l21 = LoadFullResolutionLuminance(
-        pixelPosition + int2(1, 0)
-    );
-
-    float l02 = LoadFullResolutionLuminance(
-        pixelPosition + int2(-1, 1)
-    );
-
-    float l12 = LoadFullResolutionLuminance(
-        pixelPosition + int2(0, 1)
-    );
-
-    float l22 = LoadFullResolutionLuminance(
-        pixelPosition + int2(1, 1)
-    );
-
-    float gradientX =
-        (l20 + 2.0 * l21 + l22)
-        - (l00 + 2.0 * l01 + l02);
-
-    float gradientY =
-        (l02 + 2.0 * l12 + l22)
-        - (l00 + 2.0 * l10 + l20);
-
-    return float2(
-        gradientX,
-        gradientY
-    );
-}
-
 float4 AnalyzeGaussianHorizontalPS(
     float4 position : SV_Position,
     float2 texcoord : TEXCOORD
 ) : SV_Target
 {
-    int2 pixelPosition = int2(position.xy);
-    int activeRadius = clamp(GaussianRadius, 0, 8);
+    if (!NeedsImageEdgePipeline())
+    {
+        return 0.0;
+    }
 
-    float smallSigma = max(GaussianSigma, 0.0001);
+    int2 pixelPosition = int2(position.xy);
+    float smallSigma = ASCII_GAUSSIAN_SIGMA;
     float largeSigma = max(
-        smallSigma * max(GaussianScale, 1.0),
+        smallSigma * ASCII_GAUSSIAN_SCALE,
         0.0001
     );
 
     float2 weightedLuminance = float2(0.0, 0.0);
     float2 totalWeight = float2(0.0, 0.0);
 
-    for (int sampleOffset = -8; sampleOffset <= 8; ++sampleOffset)
+    for (
+        int sampleOffset = -ASCII_GAUSSIAN_RADIUS;
+        sampleOffset <= ASCII_GAUSSIAN_RADIUS;
+        ++sampleOffset
+    )
     {
-        if (abs(sampleOffset) > activeRadius)
-        {
-            continue;
-        }
-
         float luminance = LoadFullResolutionLuminance(
             pixelPosition + int2(sampleOffset, 0)
         );
@@ -2672,25 +2697,27 @@ float4 AnalyzeGaussianVerticalPS(
     float2 texcoord : TEXCOORD
 ) : SV_Target
 {
-    int2 pixelPosition = int2(position.xy);
-    int activeRadius = clamp(GaussianRadius, 0, 8);
+    if (!NeedsImageEdgePipeline())
+    {
+        return 0.0;
+    }
 
-    float smallSigma = max(GaussianSigma, 0.0001);
+    int2 pixelPosition = int2(position.xy);
+    float smallSigma = ASCII_GAUSSIAN_SIGMA;
     float largeSigma = max(
-        smallSigma * max(GaussianScale, 1.0),
+        smallSigma * ASCII_GAUSSIAN_SCALE,
         0.0001
     );
 
     float2 weightedLuminance = float2(0.0, 0.0);
     float2 totalWeight = float2(0.0, 0.0);
 
-    for (int sampleOffset = -8; sampleOffset <= 8; ++sampleOffset)
+    for (
+        int sampleOffset = -ASCII_GAUSSIAN_RADIUS;
+        sampleOffset <= ASCII_GAUSSIAN_RADIUS;
+        ++sampleOffset
+    )
     {
-        if (abs(sampleOffset) > activeRadius)
-        {
-            continue;
-        }
-
         float2 luminancePair = LoadGaussianHorizontal(
             pixelPosition + int2(0, sampleOffset)
         );
@@ -2729,6 +2756,11 @@ float4 AnalyzeEdgeEvidencePS(
     float2 texcoord : TEXCOORD
 ) : SV_Target
 {
+    if (!NeedsImageEdgePipeline())
+    {
+        return 0.0;
+    }
+
     int2 pixelPosition = int2(position.xy);
 
     float l00 = LoadBinaryDoG(
@@ -2776,14 +2808,9 @@ float4 AnalyzeEdgeEvidencePS(
         gradientY
     );
 
-    float accepted =
-        length(gradient) > 0.00001
-            ? 1.0
-            : 0.0;
-
     return float4(
         gradient,
-        accepted,
+        0.0,
         0.0
     );
 }
@@ -2793,7 +2820,10 @@ float4 AnalyzeDepthEdgeEvidencePS(
     float2 texcoord : TEXCOORD
 ) : SV_Target
 {
-    if (!DepthBufferAvailable)
+    if (
+        !DepthBufferAvailable
+        || !NeedsDepthEdgePipeline()
+    )
     {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
@@ -2821,126 +2851,6 @@ float4 AnalyzeDepthEdgeEvidencePS(
         accepted,
         proximityWeight
     );
-}
-
-float4 AnalyzeCellEdgeHistogramPS(
-    float4 position : SV_Position,
-    float2 texcoord : TEXCOORD
-) : SV_Target
-{
-    uint2 cellCoordinate = uint2(position.xy);
-    uint2 sourceOrigin =
-        cellCoordinate * ASCII_CELL_SIZE;
-
-    float4 directionCounts = float4(
-        0.0,
-        0.0,
-        0.0,
-        0.0
-    );
-
-    static const float inverseSquareRootTwo =
-        0.70710678118;
-
-    for (uint y = 0; y < ASCII_CELL_SIZE; ++y)
-    {
-        for (uint x = 0; x < ASCII_CELL_SIZE; ++x)
-        {
-            uint2 sourcePixel =
-                sourceOrigin + uint2(x, y);
-
-            if (
-                sourcePixel.x >= BUFFER_WIDTH
-                || sourcePixel.y >= BUFFER_HEIGHT
-            )
-            {
-                continue;
-            }
-
-            float2 sourceUV =
-                (float2(sourcePixel) + 0.5)
-                * BUFFER_PIXEL_SIZE;
-
-            float3 evidence = tex2Dlod(
-                AsciiEdgeEvidence,
-                float4(sourceUV, 0.0, 0.0)
-            ).rgb;
-
-            float2 gradient = evidence.rg;
-            float magnitude = length(gradient);
-
-            if (
-                evidence.b <= 0.5
-                || magnitude <= 0.00001
-            )
-            {
-                continue;
-            }
-
-            float2 lineDirection = float2(
-                -gradient.y,
-                gradient.x
-            ) / magnitude;
-
-            float4 alignment = abs(float4(
-                lineDirection.x,
-                dot(
-                    lineDirection,
-                    float2(
-                        inverseSquareRootTwo,
-                        inverseSquareRootTwo
-                    )
-                ),
-                lineDirection.y,
-                dot(
-                    lineDirection,
-                    float2(
-                        -inverseSquareRootTwo,
-                        inverseSquareRootTwo
-                    )
-                )
-            ));
-
-            int closestDirection = 0;
-            float closestAlignment = alignment.x;
-
-            if (alignment.y > closestAlignment)
-            {
-                closestDirection = 1;
-                closestAlignment = alignment.y;
-            }
-
-            if (alignment.z > closestAlignment)
-            {
-                closestDirection = 2;
-                closestAlignment = alignment.z;
-            }
-
-            if (alignment.w > closestAlignment)
-            {
-                closestDirection = 3;
-            }
-
-            if (closestDirection == 0)
-            {
-                directionCounts.x += 1.0;
-            }
-            else if (closestDirection == 1)
-            {
-                directionCounts.y += 1.0;
-            }
-            else if (closestDirection == 2)
-            {
-                directionCounts.z += 1.0;
-            }
-            else
-            {
-                directionCounts.w += 1.0;
-            }
-        }
-    }
-
-    return directionCounts;
 }
 
 float4 CalculateCellDirectionVote(float2 gradient)
@@ -3017,11 +2927,73 @@ float4 CalculateCellDirectionVote(float2 gradient)
     return float4(0.0, 0.0, 0.0, 1.0);
 }
 
+float4 AnalyzeCellEdgeHistogramPS(
+    float4 position : SV_Position,
+    float2 texcoord : TEXCOORD
+) : SV_Target
+{
+    if (!NeedsImageEdgePipeline())
+    {
+        return 0.0;
+    }
+
+    uint2 cellCoordinate = uint2(position.xy);
+    uint2 sourceOrigin =
+        cellCoordinate * ASCII_CELL_SIZE;
+
+    float4 directionCounts = float4(
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    );
+
+    for (uint y = 0; y < ASCII_CELL_SIZE; ++y)
+    {
+        for (uint x = 0; x < ASCII_CELL_SIZE; ++x)
+        {
+            uint2 sourcePixel =
+                sourceOrigin + uint2(x, y);
+
+            if (
+                sourcePixel.x >= BUFFER_WIDTH
+                || sourcePixel.y >= BUFFER_HEIGHT
+            )
+            {
+                continue;
+            }
+
+            float2 sourceUV =
+                (float2(sourcePixel) + 0.5)
+                * BUFFER_PIXEL_SIZE;
+
+            float2 gradient = tex2Dlod(
+                AsciiEdgeEvidence,
+                float4(sourceUV, 0.0, 0.0)
+            ).rg;
+
+            directionCounts += CalculateCellDirectionVote(
+                gradient
+            );
+        }
+    }
+
+    return directionCounts;
+}
+
 float4 AnalyzeCellDepthEdgeHistogramPS(
     float4 position : SV_Position,
     float2 texcoord : TEXCOORD
 ) : SV_Target
 {
+    if (
+        !DepthBufferAvailable
+        || !NeedsDepthEdgePipeline()
+    )
+    {
+        return 0.0;
+    }
+
     uint2 cellCoordinate = uint2(position.xy);
     uint2 sourceOrigin =
         cellCoordinate * ASCII_CELL_SIZE;
@@ -3076,6 +3048,11 @@ float4 StabilizeCellEdgesPS(
     float2 texcoord : TEXCOORD
 ) : SV_Target
 {
+    if (!NeedsImageTemporalPipeline())
+    {
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+
     uint2 cellCoordinate = uint2(position.xy);
 
     float2 cellUV =
@@ -3095,20 +3072,8 @@ float4 StabilizeCellEdgesPS(
         float4(cellUV, 0.0, 0.0)
     );
 
-    uint2 sourceOrigin =
-        cellCoordinate * ASCII_CELL_SIZE;
-
-    uint2 sourceEnd = min(
-        sourceOrigin + ASCII_CELL_SIZE,
-        uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
-    );
-
-    uint2 sampleExtent =
-        sourceEnd - sourceOrigin;
-
-    float sampleCount = max(
-        float(sampleExtent.x * sampleExtent.y),
-        1.0
+    float sampleCount = CalculateCellSampleCount(
+        cellCoordinate
     );
 
     return CalculateTemporalEdgeState(
@@ -3134,6 +3099,14 @@ float4 StabilizeDepthCellEdgesPS(
     float2 texcoord : TEXCOORD
 ) : SV_Target
 {
+    if (
+        !DepthBufferAvailable
+        || !NeedsDepthTemporalPipeline()
+    )
+    {
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+
     uint2 cellCoordinate = uint2(position.xy);
 
     float2 cellUV =
@@ -3153,20 +3126,8 @@ float4 StabilizeDepthCellEdgesPS(
         float4(cellUV, 0.0, 0.0)
     );
 
-    uint2 sourceOrigin =
-        cellCoordinate * ASCII_CELL_SIZE;
-
-    uint2 sourceEnd = min(
-        sourceOrigin + ASCII_CELL_SIZE,
-        uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
-    );
-
-    uint2 sampleExtent =
-        sourceEnd - sourceOrigin;
-
-    float sampleCount = max(
-        float(sampleExtent.x * sampleExtent.y),
-        1.0
+    float sampleCount = CalculateCellSampleCount(
+        cellCoordinate
     );
 
     return CalculateTemporalDepthEdgeState(
@@ -3369,68 +3330,11 @@ float4 RenderLuminanceAscii(
     );
 }
 
-float4 RenderEdgeOnlyAscii(
+float4 RenderEdgeGlyphDiagnostic(
     uint2 outputPixel,
-    bool useTemporalState
+    int edgeGlyphIndex
 )
 {
-    uint2 cellCoordinate =
-        outputPixel / ASCII_CELL_SIZE;
-
-    float2 cellUV =
-        (float2(cellCoordinate) + 0.5)
-        / float2(
-            ASCII_CELL_TEXTURE_WIDTH,
-            ASCII_CELL_TEXTURE_HEIGHT
-        );
-
-    int edgeGlyphIndex = 0;
-
-    if (useTemporalState)
-    {
-        float4 temporalState = tex2Dlod(
-            AsciiCellEdgeState,
-            float4(cellUV, 0.0, 0.0)
-        );
-
-        edgeGlyphIndex = GetTemporalEdgeGlyphIndex(
-            temporalState
-        );
-    }
-    else
-    {
-        float4 directionCounts = tex2Dlod(
-            AsciiCellEdgeHistogram,
-            float4(cellUV, 0.0, 0.0)
-        );
-
-        uint2 sourceOrigin =
-            cellCoordinate * ASCII_CELL_SIZE;
-
-        uint2 sourceEnd = min(
-            sourceOrigin + ASCII_CELL_SIZE,
-            uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
-        );
-
-        uint2 sampleExtent =
-            sourceEnd - sourceOrigin;
-
-        float sampleCount = max(
-            float(sampleExtent.x * sampleExtent.y),
-            1.0
-        );
-
-        CellEdgeClassification classification =
-            ClassifyCellEdge(
-                directionCounts,
-                sampleCount
-            );
-
-        edgeGlyphIndex = GetEdgeGlyphIndex(
-            classification
-        );
-    }
-
     uint2 localPixel =
         outputPixel % ASCII_CELL_SIZE;
 
@@ -3476,6 +3380,62 @@ float4 RenderEdgeOnlyAscii(
             glyphMask
         ),
         1.0
+    );
+}
+
+float4 RenderEdgeOnlyAscii(
+    uint2 outputPixel,
+    bool useTemporalState
+)
+{
+    uint2 cellCoordinate =
+        outputPixel / ASCII_CELL_SIZE;
+
+    float2 cellUV =
+        (float2(cellCoordinate) + 0.5)
+        / float2(
+            ASCII_CELL_TEXTURE_WIDTH,
+            ASCII_CELL_TEXTURE_HEIGHT
+        );
+
+    int edgeGlyphIndex = 0;
+
+    if (useTemporalState)
+    {
+        float4 temporalState = tex2Dlod(
+            AsciiCellEdgeState,
+            float4(cellUV, 0.0, 0.0)
+        );
+
+        edgeGlyphIndex = GetTemporalEdgeGlyphIndex(
+            temporalState
+        );
+    }
+    else
+    {
+        float4 directionCounts = tex2Dlod(
+            AsciiCellEdgeHistogram,
+            float4(cellUV, 0.0, 0.0)
+        );
+
+        float sampleCount = CalculateCellSampleCount(
+            cellCoordinate
+        );
+
+        CellEdgeClassification classification =
+            ClassifyCellEdge(
+                directionCounts,
+                sampleCount
+            );
+
+        edgeGlyphIndex = GetEdgeGlyphIndex(
+            classification
+        );
+    }
+
+    return RenderEdgeGlyphDiagnostic(
+        outputPixel,
+        edgeGlyphIndex
     );
 }
 
@@ -3514,19 +3474,8 @@ float4 RenderDepthEdgeOnlyAscii(
             float4(cellUV, 0.0, 0.0)
         );
 
-        uint2 sourceOrigin =
-            cellCoordinate * ASCII_CELL_SIZE;
-
-        uint2 sourceEnd = min(
-            sourceOrigin + ASCII_CELL_SIZE,
-            uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
-        );
-
-        uint2 sampleExtent = sourceEnd - sourceOrigin;
-
-        float sampleCount = max(
-            float(sampleExtent.x * sampleExtent.y),
-            1.0
+        float sampleCount = CalculateCellSampleCount(
+            cellCoordinate
         );
 
         CellEdgeClassification classification =
@@ -3540,51 +3489,9 @@ float4 RenderDepthEdgeOnlyAscii(
         );
     }
 
-    uint2 localPixel =
-        outputPixel % ASCII_CELL_SIZE;
-
-    float2 glyphUV =
-        (float2(localPixel) + 0.5)
-        / float2(
-            ASCII_GLYPH_WIDTH,
-            ASCII_GLYPH_HEIGHT
-        );
-
-    float2 atlasUV = float2(
-        (
-            float(edgeGlyphIndex)
-            + glyphUV.x
-        ) / ASCII_EDGE_GLYPH_COUNT,
-        glyphUV.y
-    );
-
-    float glyphMask = tex2Dlod(
-        EdgeGlyphAtlas,
-        float4(atlasUV, 0.0, 0.0)
-    ).r;
-
-    float3 foregroundColor =
-        float3(1.0, 1.0, 1.0);
-
-    float3 backgroundColor =
-        float3(0.0, 0.0, 0.0);
-
-    if (ColorMode == 1)
-    {
-        foregroundColor = GetPaletteForegroundColor(
-            GetActiveGlyphCount() - 1.0
-        );
-
-        backgroundColor = GetPaletteBackgroundColor();
-    }
-
-    return float4(
-        lerp(
-            backgroundColor,
-            foregroundColor,
-            glyphMask
-        ),
-        1.0
+    return RenderEdgeGlyphDiagnostic(
+        outputPixel,
+        edgeGlyphIndex
     );
 }
 
@@ -3606,51 +3513,9 @@ float4 RenderCombinedEdgeOnlyAscii(uint2 outputPixel)
             )
             : 0;
 
-    uint2 localPixel =
-        outputPixel % ASCII_CELL_SIZE;
-
-    float2 glyphUV =
-        (float2(localPixel) + 0.5)
-        / float2(
-            ASCII_GLYPH_WIDTH,
-            ASCII_GLYPH_HEIGHT
-        );
-
-    float2 atlasUV = float2(
-        (
-            float(edgeGlyphIndex)
-            + glyphUV.x
-        ) / ASCII_EDGE_GLYPH_COUNT,
-        glyphUV.y
-    );
-
-    float glyphMask = tex2Dlod(
-        EdgeGlyphAtlas,
-        float4(atlasUV, 0.0, 0.0)
-    ).r;
-
-    float3 foregroundColor =
-        float3(1.0, 1.0, 1.0);
-
-    float3 backgroundColor =
-        float3(0.0, 0.0, 0.0);
-
-    if (ColorMode == 1)
-    {
-        foregroundColor = GetPaletteForegroundColor(
-            GetActiveGlyphCount() - 1.0
-        );
-
-        backgroundColor = GetPaletteBackgroundColor();
-    }
-
-    return float4(
-        lerp(
-            backgroundColor,
-            foregroundColor,
-            glyphMask
-        ),
-        1.0
+    return RenderEdgeGlyphDiagnostic(
+        outputPixel,
+        edgeGlyphIndex
     );
 }
 
@@ -3661,7 +3526,7 @@ float4 DisplayCellColorPS(
 {
     uint2 outputPixel = uint2(position.xy);
 
-    if (DebugView == 48)
+    if (DiagnosticView == ASCII_VIEW_GENERATED_PALETTE_STRIP)
     {
         int roleIndex = min(
             int(saturate(texcoord.x) * 6.0),
@@ -3674,7 +3539,7 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 27 || DebugView == 28)
+    if (DiagnosticView == ASCII_VIEW_LINEARIZED_DEPTH)
     {
         if (!DepthBufferAvailable)
         {
@@ -3685,16 +3550,10 @@ float4 DisplayCellColorPS(
             (float2(outputPixel) + 0.5)
             * BUFFER_PIXEL_SIZE;
 
-        float displayedDepth =
-            DebugView == 27
-                ? tex2Dlod(
-                    ReShade::DepthBuffer,
-                    float4(depthUV, 0.0, 0.0)
-                ).r
-                : saturate(
-                    ReShade::GetLinearizedDepth(depthUV)
-                    * max(DepthDisplayScale, 0.0)
-                );
+        float displayedDepth = saturate(
+            ReShade::GetLinearizedDepth(depthUV)
+            * max(DepthDisplayScale, 0.0)
+        );
 
         return float4(
             displayedDepth,
@@ -3704,7 +3563,10 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView >= 29 && DebugView <= 33)
+    if (
+        DiagnosticView >= ASCII_VIEW_DEPTH_SOBEL_MAGNITUDE
+        && DiagnosticView <= ASCII_VIEW_DEPTH_EVIDENCE_MASK
+    )
     {
         if (!DepthBufferAvailable)
         {
@@ -3727,7 +3589,7 @@ float4 DisplayCellColorPS(
             * max(DepthSobelDisplayScale, 0.0)
         );
 
-        if (DebugView == 29)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_SOBEL_MAGNITUDE)
         {
             return float4(
                 visibility,
@@ -3739,7 +3601,7 @@ float4 DisplayCellColorPS(
 
         float proximityWeight = depthEvidence.a;
 
-        if (DebugView == 31)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_PROXIMITY_WEIGHT)
         {
             return float4(
                 proximityWeight,
@@ -3752,7 +3614,7 @@ float4 DisplayCellColorPS(
         float weightedMagnitude =
             magnitude * proximityWeight;
 
-        if (DebugView == 32)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_WEIGHTED_MAGNITUDE)
         {
             float weightedVisibility = saturate(
                 weightedMagnitude
@@ -3767,7 +3629,7 @@ float4 DisplayCellColorPS(
             );
         }
 
-        if (DebugView == 33)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_EVIDENCE_MASK)
         {
             float acceptedEdge = depthEvidence.b;
 
@@ -3799,14 +3661,17 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView >= 34 && DebugView <= 39)
+    if (
+        DiagnosticView >= ASCII_VIEW_DEPTH_CELL_PIXEL_COUNT
+        && DiagnosticView <= ASCII_VIEW_DEPTH_EDGE_ONLY
+    )
     {
         if (!DepthBufferAvailable)
         {
             return float4(1.0, 0.0, 1.0, 1.0);
         }
 
-        if (DebugView == 39)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_EDGE_ONLY)
         {
             return RenderDepthEdgeOnlyAscii(
                 outputPixel,
@@ -3829,20 +3694,8 @@ float4 DisplayCellColorPS(
             float4(cellUV, 0.0, 0.0)
         );
 
-        uint2 sourceOrigin =
-            cellCoordinate * ASCII_CELL_SIZE;
-
-        uint2 sourceEnd = min(
-            sourceOrigin + ASCII_CELL_SIZE,
-            uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
-        );
-
-        uint2 sampleExtent =
-            sourceEnd - sourceOrigin;
-
-        float sampleCount = max(
-            float(sampleExtent.x * sampleExtent.y),
-            1.0
+        float sampleCount = CalculateCellSampleCount(
+            cellCoordinate
         );
 
         CellEdgeClassification classification =
@@ -3851,7 +3704,7 @@ float4 DisplayCellColorPS(
                 sampleCount
             );
 
-        if (DebugView == 34)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_CELL_PIXEL_COUNT)
         {
             float acceptedProportion = saturate(
                 classification.totalCount / sampleCount
@@ -3868,7 +3721,7 @@ float4 DisplayCellColorPS(
             return float4(displayValue, 1.0);
         }
 
-        if (DebugView == 35)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_CELL_SUPPORT)
         {
             float displayedSupport =
                 DisplayThresholdCenteredValue(
@@ -3885,7 +3738,7 @@ float4 DisplayCellColorPS(
             );
         }
 
-        if (DebugView == 36)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_CELL_DOMINANCE)
         {
             float displayedDominance =
                 classification.totalCount > 0.00001
@@ -3906,7 +3759,7 @@ float4 DisplayCellColorPS(
             );
         }
 
-        if (DebugView == 37)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_CELL_DIRECTION)
         {
             float3 directionColor =
                 classification.totalCount > 0.00001
@@ -3929,14 +3782,17 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView >= 40 && DebugView <= 44)
+    if (
+        DiagnosticView >= ASCII_VIEW_DEPTH_STABILIZED_CANDIDATE
+        && DiagnosticView <= ASCII_VIEW_DEPTH_STABILIZED_EDGE_ONLY
+    )
     {
         if (!DepthBufferAvailable)
         {
             return float4(1.0, 0.0, 1.0, 1.0);
         }
 
-        if (DebugView == 43)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_STABILIZED_EDGE_ONLY)
         {
             return RenderDepthEdgeOnlyAscii(
                 outputPixel,
@@ -3954,29 +3810,12 @@ float4 DisplayCellColorPS(
                 ASCII_CELL_TEXTURE_HEIGHT
             );
 
-        if (DebugView == 44)
-        {
-            float historyIsValid = tex2Dlod(
-                AsciiPreviousDepthCellEdgeState,
-                float4(cellUV, 0.0, 0.0)
-            ).a > 0.999
-                ? 1.0
-                : 0.0;
-
-            return float4(
-                historyIsValid,
-                historyIsValid,
-                historyIsValid,
-                1.0
-            );
-        }
-
         float4 temporalState = tex2Dlod(
             AsciiDepthCellEdgeState,
             float4(cellUV, 0.0, 0.0)
         );
 
-        if (DebugView == 40)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_STABILIZED_CANDIDATE)
         {
             return float4(
                 temporalState.rrr,
@@ -3984,7 +3823,7 @@ float4 DisplayCellColorPS(
             );
         }
 
-        if (DebugView == 41)
+        if (DiagnosticView == ASCII_VIEW_DEPTH_STABILIZED_DIRECTION)
         {
             float3 directionColor =
                 temporalState.r > 0.5
@@ -4007,9 +3846,12 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 45 || DebugView == 46)
+    if (
+        DiagnosticView == ASCII_VIEW_COMBINED_EDGE_SOURCE
+        || DiagnosticView == ASCII_VIEW_COMBINED_EDGE_ONLY
+    )
     {
-        if (DebugView == 46)
+        if (DiagnosticView == ASCII_VIEW_COMBINED_EDGE_ONLY)
         {
             return RenderCombinedEdgeOnlyAscii(
                 outputPixel
@@ -4053,7 +3895,7 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 21)
+    if (DiagnosticView == ASCII_VIEW_IMAGE_EDGE_ONLY)
     {
         return RenderEdgeOnlyAscii(
             outputPixel,
@@ -4061,7 +3903,7 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 25)
+    if (DiagnosticView == ASCII_VIEW_IMAGE_STABILIZED_EDGE_ONLY)
     {
         return RenderEdgeOnlyAscii(
             outputPixel,
@@ -4069,7 +3911,10 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView >= 22 && DebugView <= 24)
+    if (
+        DiagnosticView >= ASCII_VIEW_IMAGE_STABILIZED_CANDIDATE
+        && DiagnosticView <= ASCII_VIEW_IMAGE_TEMPORAL_INTERVENTION
+    )
     {
         uint2 cellCoordinate =
             outputPixel / ASCII_CELL_SIZE;
@@ -4086,7 +3931,7 @@ float4 DisplayCellColorPS(
             float4(cellUV, 0.0, 0.0)
         );
 
-        if (DebugView == 22)
+        if (DiagnosticView == ASCII_VIEW_IMAGE_STABILIZED_CANDIDATE)
         {
             return float4(
                 temporalState.rrr,
@@ -4094,7 +3939,7 @@ float4 DisplayCellColorPS(
             );
         }
 
-        if (DebugView == 23)
+        if (DiagnosticView == ASCII_VIEW_IMAGE_STABILIZED_DIRECTION)
         {
             float3 directionColor =
                 temporalState.r > 0.5
@@ -4117,34 +3962,7 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 26)
-    {
-        uint2 cellCoordinate =
-            outputPixel / ASCII_CELL_SIZE;
-
-        float2 cellUV =
-            (float2(cellCoordinate) + 0.5)
-            / float2(
-                ASCII_CELL_TEXTURE_WIDTH,
-                ASCII_CELL_TEXTURE_HEIGHT
-            );
-
-        float historyIsValid = tex2Dlod(
-            AsciiPreviousCellEdgeState,
-            float4(cellUV, 0.0, 0.0)
-        ).a > 0.999
-            ? 1.0
-            : 0.0;
-
-        return float4(
-            historyIsValid,
-            historyIsValid,
-            historyIsValid,
-            1.0
-        );
-    }
-
-    if (DebugView == 5)
+    if (DiagnosticView == ASCII_VIEW_FULL_RESOLUTION_LUMINANCE)
     {
         float luminance = LoadFullResolutionLuminance(
             int2(outputPixel)
@@ -4157,93 +3975,25 @@ float4 DisplayCellColorPS(
         return float4(displayLuminance, 1.0);
     }
 
-    if (DebugView == 6 || DebugView == 7)
-    {
-        float2 gradient = CalculateFullResolutionSobel(
-            int2(outputPixel)
-        );
-
-        float magnitude = length(gradient);
-        float visibility = saturate(
-            magnitude
-            * max(SobelMagnitudeDisplayScale, 0.0)
-        );
-
-        if (DebugView == 6)
-        {
-            float3 displayMagnitude = EncodeAnalysisColor(
-                float3(visibility, visibility, visibility)
-            );
-
-            return float4(displayMagnitude, 1.0);
-        }
-
-        if (magnitude <= 0.00001)
-        {
-            return float4(0.0, 0.0, 0.0, 1.0);
-        }
-
-        float2 direction = gradient / magnitude;
-        float2 encodedDirection =
-            direction * 0.5 + 0.5;
-
-        float3 directionColor = float3(
-            encodedDirection,
-            0.5
-        ) * visibility;
-
-        return float4(
-            EncodeAnalysisColor(directionColor),
-            1.0
-        );
-    }
-
-    if (DebugView == 8 || DebugView == 9)
-    {
-        float2 sampleUV =
-            (float2(outputPixel) + 0.5)
-            * BUFFER_PIXEL_SIZE;
-
-        float2 gaussianPair = tex2Dlod(
-            AsciiGaussianVertical,
-            float4(sampleUV, 0.0, 0.0)
-        ).rg;
-
-        float luminance =
-            DebugView == 8
-                ? gaussianPair.x
-                : gaussianPair.y;
-
-        float3 displayLuminance = EncodeAnalysisColor(
-            float3(luminance, luminance, luminance)
-        );
-
-        return float4(displayLuminance, 1.0);
-    }
-
     if (
-        DebugView == 10
-        || DebugView == 11
-        || DebugView == 12
+        DiagnosticView == ASCII_VIEW_TAU_DOG_RESPONSE
+        || DiagnosticView == ASCII_VIEW_BINARY_DOG
     )
     {
         float2 gaussianPair = LoadGaussianVertical(
             int2(outputPixel)
         );
 
-        float signedDoG =
-            gaussianPair.x - gaussianPair.y;
-
         float thresholdResponse =
             gaussianPair.x
-            - DoGTau * gaussianPair.y;
+            - ASCII_DOG_TAU * gaussianPair.y;
 
         float displayScale = max(DoGDisplayScale, 0.0);
 
-        if (DebugView == 12)
+        if (DiagnosticView == ASCII_VIEW_BINARY_DOG)
         {
             float accepted =
-                thresholdResponse >= max(DoGThreshold, 0.0)
+                thresholdResponse >= ASCII_DOG_THRESHOLD
                     ? 1.0
                     : 0.0;
 
@@ -4255,14 +4005,9 @@ float4 DisplayCellColorPS(
             );
         }
 
-        float response = signedDoG;
-
-        if (DebugView == 11)
-        {
-            response =
-                thresholdResponse
-                - max(DoGThreshold, 0.0);
-        }
+        float response =
+            thresholdResponse
+            - ASCII_DOG_THRESHOLD;
 
         float positiveResponse = saturate(
             max(response, 0.0) * displayScale
@@ -4285,45 +4030,39 @@ float4 DisplayCellColorPS(
     }
 
     if (
-        DebugView == 13
-        || DebugView == 14
-        || DebugView == 15
+        DiagnosticView == ASCII_VIEW_IMAGE_EVIDENCE_MASK
+        || DiagnosticView == ASCII_VIEW_IMAGE_EVIDENCE_DIRECTION
     )
     {
         float2 sampleUV =
             (float2(outputPixel) + 0.5)
             * BUFFER_PIXEL_SIZE;
 
-        float3 evidence = tex2Dlod(
+        float2 gradient = tex2Dlod(
             AsciiEdgeEvidence,
             float4(sampleUV, 0.0, 0.0)
-        ).rgb;
+        ).rg;
 
-        if (DebugView == 13)
+        if (DiagnosticView == ASCII_VIEW_IMAGE_EVIDENCE_MASK)
         {
+            float accepted =
+                length(gradient) > 0.00001
+                    ? 1.0
+                    : 0.0;
+
             return float4(
-                evidence.b,
-                evidence.b,
-                evidence.b,
+                accepted,
+                accepted,
+                accepted,
                 1.0
             );
         }
 
-        float2 gradient = evidence.rg;
         float magnitude = length(gradient);
         float visibility = saturate(
             magnitude
             * max(SobelMagnitudeDisplayScale, 0.0)
         );
-
-        if (DebugView == 14)
-        {
-            float3 displayMagnitude = EncodeAnalysisColor(
-                float3(visibility, visibility, visibility)
-            );
-
-            return float4(displayMagnitude, 1.0);
-        }
 
         if (magnitude <= 0.00001)
         {
@@ -4345,7 +4084,10 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView >= 16 && DebugView <= 20)
+    if (
+        DiagnosticView >= ASCII_VIEW_IMAGE_CELL_PIXEL_COUNT
+        && DiagnosticView <= ASCII_VIEW_IMAGE_CELL_CANDIDATE
+    )
     {
         uint2 cellCoordinate =
             outputPixel / ASCII_CELL_SIZE;
@@ -4362,20 +4104,8 @@ float4 DisplayCellColorPS(
             float4(cellUV, 0.0, 0.0)
         );
 
-        uint2 sourceOrigin =
-            cellCoordinate * ASCII_CELL_SIZE;
-
-        uint2 sourceEnd = min(
-            sourceOrigin + ASCII_CELL_SIZE,
-            uint2(BUFFER_WIDTH, BUFFER_HEIGHT)
-        );
-
-        uint2 sampleExtent =
-            sourceEnd - sourceOrigin;
-
-        float sampleCount = max(
-            float(sampleExtent.x * sampleExtent.y),
-            1.0
+        float sampleCount = CalculateCellSampleCount(
+            cellCoordinate
         );
 
         CellEdgeClassification classification =
@@ -4384,7 +4114,7 @@ float4 DisplayCellColorPS(
                 sampleCount
             );
 
-        if (DebugView == 16)
+        if (DiagnosticView == ASCII_VIEW_IMAGE_CELL_PIXEL_COUNT)
         {
             float acceptedProportion = saturate(
                 classification.totalCount / sampleCount
@@ -4401,7 +4131,7 @@ float4 DisplayCellColorPS(
             return float4(displayValue, 1.0);
         }
 
-        if (DebugView == 17)
+        if (DiagnosticView == ASCII_VIEW_IMAGE_CELL_SUPPORT)
         {
             float displayedSupport =
                 DisplayThresholdCenteredValue(
@@ -4419,7 +4149,7 @@ float4 DisplayCellColorPS(
             return float4(displayValue, 1.0);
         }
 
-        if (DebugView == 18)
+        if (DiagnosticView == ASCII_VIEW_IMAGE_CELL_DOMINANCE)
         {
             float displayedDominance =
                 classification.totalCount > 0.00001
@@ -4439,7 +4169,7 @@ float4 DisplayCellColorPS(
             return float4(displayValue, 1.0);
         }
 
-        if (DebugView == 19)
+        if (DiagnosticView == ASCII_VIEW_IMAGE_CELL_DIRECTION)
         {
             float3 directionColor =
                 classification.totalCount > 0.00001
@@ -4462,7 +4192,7 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 3)
+    if (DiagnosticView == ASCII_VIEW_GLYPH_ATLAS)
     {
         return DisplayGlyphAtlasPreview(
             outputPixel
@@ -4491,7 +4221,7 @@ float4 DisplayCellColorPS(
     float glyphIndex =
         CalculateGlyphIndex(luminance);
 
-    if (DebugView == 47)
+    if (DiagnosticView == ASCII_VIEW_PALETTE_SLOT)
     {
         float3 slotColor =
             glyphIndex < 1.0
@@ -4506,7 +4236,7 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 4)
+    if (DiagnosticView == ASCII_VIEW_OUTPUT)
     {
         return RenderLuminanceAscii(
             outputPixel,
@@ -4515,7 +4245,7 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 1)
+    if (DiagnosticView == ASCII_VIEW_CELL_LUMINANCE)
     {
         float3 displayLuminance = EncodeAnalysisColor(
             float3(luminance, luminance, luminance)
@@ -4527,7 +4257,7 @@ float4 DisplayCellColorPS(
         );
     }
 
-    if (DebugView == 2)
+    if (DiagnosticView == ASCII_VIEW_GLYPH_INDEX)
     {
         float glyphCount = GetActiveGlyphCount();
 
@@ -4576,7 +4306,7 @@ technique AsciiShader
     {
         VertexShader = PostProcessVS;
         PixelShader = AnalyzeEdgeEvidencePS;
-        RenderTarget = AsciiEdgeEvidenceTexture;
+        RenderTarget = AsciiGaussianHorizontalTexture;
     }
 
     pass AnalyzeDepthEdgeEvidence

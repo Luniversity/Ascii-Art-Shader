@@ -1,1 +1,14 @@
+# Local benchmark output (selected reports may be added deliberately).
 /BenchmarkResults/
+
+# Unity may create recovery scenes after a crash or interrupted save.
+/My project/Assets/_Recovery/
+/My project/Assets/_Recovery.meta
+
+# Repository-local temporary and editor files.
+/Temp/
+.DS_Store
+Thumbs.db
+*.suo
+*.user
+*.userprefs
