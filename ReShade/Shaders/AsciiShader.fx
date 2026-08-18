@@ -1,13 +1,17 @@
 #include "ReShade.fxh"
 
 #define ASCII_CELL_SIZE 8
-#define ASCII_GLYPH_COUNT 10.0
+#define ASCII_CLASSIC_GLYPH_COUNT 10.0
+#define ASCII_EXTENDED_GLYPH_COUNT 16.0
 
 #define ASCII_GLYPH_WIDTH 8
 #define ASCII_GLYPH_HEIGHT 8
 
-#define ASCII_GLYPH_ATLAS_WIDTH \
+#define ASCII_CLASSIC_GLYPH_ATLAS_WIDTH \
     (ASCII_GLYPH_WIDTH * 10)
+
+#define ASCII_EXTENDED_GLYPH_ATLAS_WIDTH \
+    (ASCII_GLYPH_WIDTH * 16)
 
 #define ASCII_GLYPH_ATLAS_HEIGHT \
     ASCII_GLYPH_HEIGHT
@@ -115,7 +119,16 @@ texture GlyphAtlasTexture <
     source = "GlyphAtlas.png";
 >
 {
-    Width = ASCII_GLYPH_ATLAS_WIDTH;
+    Width = ASCII_CLASSIC_GLYPH_ATLAS_WIDTH;
+    Height = ASCII_GLYPH_ATLAS_HEIGHT;
+    Format = R8;
+};
+
+texture GlyphAtlas16Texture <
+    source = "GlyphAtlas16.png";
+>
+{
+    Width = ASCII_EXTENDED_GLYPH_ATLAS_WIDTH;
     Height = ASCII_GLYPH_ATLAS_HEIGHT;
     Format = R8;
 };
@@ -140,6 +153,30 @@ sampler GlyphAtlas
     MagFilter = POINT;
     MipFilter = POINT;
 };
+
+sampler GlyphAtlas16
+{
+    Texture = GlyphAtlas16Texture;
+
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = POINT;
+};
+
+uniform int GlyphSet <
+    ui_category = "Appearance";
+    ui_label = "Glyph Set";
+    ui_tooltip =
+        "Choose the classic ten-step ramp or the extended sixteen-step "
+        "ramp.";
+    ui_type = "combo";
+    ui_items =
+        "Classic (10 Glyphs)\0"
+        "Extended (16 Glyphs)\0";
+> = 0;
 
 uniform int ColorMode <
     ui_category = "Appearance";
@@ -784,11 +821,36 @@ float3 EncodeAnalysisColor(float3 color)
 }
 
 
+float GetActiveGlyphCount()
+{
+    return GlyphSet == 1
+        ? ASCII_EXTENDED_GLYPH_COUNT
+        : ASCII_CLASSIC_GLYPH_COUNT;
+}
+
+float SampleActiveGlyphAtlas(float2 atlasUV)
+{
+    if (GlyphSet == 1)
+    {
+        return tex2Dlod(
+            GlyphAtlas16,
+            float4(atlasUV, 0.0, 0.0)
+        ).r;
+    }
+
+    return tex2Dlod(
+        GlyphAtlas,
+        float4(atlasUV, 0.0, 0.0)
+    ).r;
+}
+
 float CalculateGlyphIndex(float luminance)
 {
+    float glyphCount = GetActiveGlyphCount();
+
     return min(
-        floor(luminance * ASCII_GLYPH_COUNT),
-        ASCII_GLYPH_COUNT - 1.0
+        floor(luminance * glyphCount),
+        glyphCount - 1.0
     );
 }
 
@@ -2375,8 +2437,12 @@ float4 DisplayGlyphAtlasPreview(uint2 outputPixel)
 {
     static const uint previewScale = 8u;
 
+    uint activeAtlasWidth =
+        uint(GetActiveGlyphCount())
+        * ASCII_GLYPH_WIDTH;
+
     uint2 previewSize = uint2(
-        ASCII_GLYPH_ATLAS_WIDTH,
+        activeAtlasWidth,
         ASCII_GLYPH_ATLAS_HEIGHT
     ) * previewScale;
 
@@ -2391,14 +2457,13 @@ float4 DisplayGlyphAtlasPreview(uint2 outputPixel)
     float2 atlasUV =
         (float2(atlasPixel) + 0.5)
         / float2(
-            ASCII_GLYPH_ATLAS_WIDTH,
+            activeAtlasWidth,
             ASCII_GLYPH_ATLAS_HEIGHT
         );
 
-    float glyphMask = tex2Dlod(
-        GlyphAtlas,
-        float4(atlasUV, 0.0, 0.0)
-    ).r;
+    float glyphMask = SampleActiveGlyphAtlas(
+        atlasUV
+    );
 
     return float4(
         glyphMask,
@@ -2428,14 +2493,13 @@ float4 RenderLuminanceAscii(
         (
             glyphIndex
             + glyphUV.x
-        ) / ASCII_GLYPH_COUNT,
+        ) / GetActiveGlyphCount(),
         glyphUV.y
     );
 
-    float glyphMask = tex2Dlod(
-        GlyphAtlas,
-        float4(atlasUV, 0.0, 0.0)
-    ).r;
+    float glyphMask = SampleActiveGlyphAtlas(
+        atlasUV
+    );
 
     if (EnableEdgeGlyphs)
     {
@@ -3624,9 +3688,11 @@ float4 DisplayCellColorPS(
 
     if (DebugView == 2)
     {
+        float glyphCount = GetActiveGlyphCount();
+
         float normalizedGlyphIndex =
             glyphIndex
-            / (ASCII_GLYPH_COUNT - 1.0);
+            / (glyphCount - 1.0);
 
         return float4(
             normalizedGlyphIndex,

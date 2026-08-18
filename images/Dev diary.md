@@ -753,3 +753,25 @@ Here is the final result:
 ![no edges](image-74.png)
 ![image edges](image-75.png)
 ![image and depth edges](image-76.png)
+
+
+## Day 9
+
+### Extending the glyph atlas
+
+The original shader used ten luminance glyphs. This looked good and was enough to represent the complete luminance range, but each glyph covered a relatively large range of brightness. This meant that subtle gradients, shadows and highlights could lose detail. 
+
+I wanted to see what adding more glyphs would do to the image. So I manually created a second atlas containing sixteen 8x8 glyphs. The glyphs are still completely binary. 
+![alt text](GlyphAtlas16.png)
+
+The 16 glyph atlast became the "extended" glyph set, 10 is stil the default.
+
+Defualt set:
+![classic glyph set](image-78.png)
+Extended set:
+![extended glyph set](image-79.png)
+
+The Extended set produces finer gradients and preserves more information in shadows and highlights. It also leaves fewer cells completely blank. This makes the result slightly brighter overall because the blank glyph now represents a smaller portion of the luminance range.
+
+The two sets do not have exactly the same overall brightness because their glyph-density distributions are different. Properly calibrating every glyph by its perceived brightness could make them match more closely, but then we run into more issues that I don t bother dealing with. It already looks good as is. 
+
