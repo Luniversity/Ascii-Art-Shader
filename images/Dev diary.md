@@ -775,3 +775,68 @@ The Extended set produces finer gradients and preserves more information in shad
 
 The two sets do not have exactly the same overall brightness because their glyph-density distributions are different. Properly calibrating every glyph by its perceived brightness could make them match more closely, but then we run into more issues that I don t bother dealing with. It already looks good as is. 
 
+### Overhauling the palette colour mode
+
+The original Palette mode was very simple. It only had one background colour and one foreground colour. Every visible glyph used the same foreground colour regardless of its density.
+![manual color palette 2 colors](image-82.png)
+This worked well for lower-contrast monochrome styles, but it did not really take advantage of having multiple glyph densities. I wanted the darker and brighter glyphs to use different colours while still preserving the luminance structure of the image.
+
+The new palette would contain 6 colours:
+
+    Slot 0: Background
+    Slot 1: Darkest foreground
+    Slot 2: Dark foreground
+    Slot 3: Middle foreground
+    Slot 4: Bright foreground
+    Slot 5: Brightest foreground
+
+The Extended glyph set uses all five foreground slots. The Classic glyph set only uses three of them because it has fewer glyphs, but it still samples the darkest, middle and brightest parts of the same palette.
+
+Edge glyphs use the colour that the original luminance glyph would have received. This means replacing a luminance glyph with an edge does not introduce an unrelated colour.
+
+The shader still supports manually selecting every colour. There is now a two-colour manual palette and a six-colour manual palette. However, selecting six colours that have predictable brightness and look good together is quite difficult, so I also wanted a generated option.
+
+### Generating colours with OKLAB
+
+RGB is not very convenient for generating palettes. Changing an RGB colour’s hue can also change how bright it appears, even when its numerical brightness looks similar.
+
+Instead, the generated palette uses Oklab/OKLCH. This colour space is designed so that its lightness value is closer to how humans perceive brightness.
+
+Rather than exposing the technical Oklab axes, the shader presents three familiar controls:
+
+    Palette Hue
+    Palette Brightness
+    Palette Colour Intensity
+
+Hue controls the base colour. Brightness controls the perceptual lightness of the middle foreground slot. Colour Intensity controls how colourful the palette is. The shader then creates five foreground colours with increasing Oklab lightness. The background is generated using the same hue system, but is made darker and less colourful. Some combinations of hue, lightness and colour intensity cannot be displayed by a normal monitor. When this happens, the shader gradually reduces the colour intensity until the colour fits inside the displayable RGB range.
+
+### Colour Harmonies
+
+Once the lightness ramp worked, I added several ways to distribute hues across it.
+
+- Tonal uses the same hue for the complete palette. Only lightness and colour intensity change.
+
+- Analogous spreads the five foreground colours across a configurable section of the colour wheel. The colours remain relatively close to each other, creating a smooth and cohesive palette.
+
+- Complementary uses two colours on opposite sides of the colour wheel. The background and two darkest foreground slots use the selected hue. The three brightest slots use its complement.
+
+- Triadic uses three colours separated by 120 degrees. The background and first foreground slot use one hue, the two middle slots use the selected hue, and the two brightest slots use the final hue.
+
+All four methods use the same Oklab lightness ramp, so changing harmony should alter the colour relationships without destroying the brightness ordering.
+
+Tonal:
+![tonal](image-85.png)
+Analagous:
+![analogous](image-86.png)
+Complimentary:
+![complimentary](image-87.png)
+Triadic:
+![triadic](image-88.png)
+
+While playing around with the colour harmony settings, I found that the ranges consistently produced reasonably good results. This made it possible to add a semi-random palette button. It does not generate completely arbitrary values. It selects values from the ranges that I already found usable
+
+Despite the simple randomization, the results were surprisingly consistent and visually pleasing:
+
+![random1](image-89.png)
+![random2](image-90.png)
+![random3](image-91.png)

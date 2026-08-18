@@ -115,6 +115,27 @@ texture AsciiPreviousDepthCellEdgeStateTexture
     Format = RGBA8;
 };
 
+texture AsciiGeneratedPaletteTexture
+{
+    Width = 6;
+    Height = 1;
+    Format = RGBA16F;
+};
+
+texture AsciiRandomPaletteStateTexture
+{
+    Width = 2;
+    Height = 1;
+    Format = RGBA16F;
+};
+
+texture AsciiPreviousRandomPaletteStateTexture
+{
+    Width = 2;
+    Height = 1;
+    Format = RGBA16F;
+};
+
 texture GlyphAtlasTexture <
     source = "GlyphAtlas.png";
 >
@@ -166,8 +187,47 @@ sampler GlyphAtlas16
     MipFilter = POINT;
 };
 
+sampler AsciiGeneratedPalette
+{
+    Texture = AsciiGeneratedPaletteTexture;
+
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = POINT;
+};
+
+sampler AsciiRandomPaletteState
+{
+    Texture = AsciiRandomPaletteStateTexture;
+
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = POINT;
+};
+
+sampler AsciiPreviousRandomPaletteState
+{
+    Texture = AsciiPreviousRandomPaletteStateTexture;
+
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = POINT;
+};
+
+uniform int AsciiPaletteFrameCount <
+    source = "framecount";
+>;
+
 uniform int GlyphSet <
-    ui_category = "Appearance";
     ui_label = "Glyph Set";
     ui_tooltip =
         "Choose the classic ten-step ramp or the extended sixteen-step "
@@ -179,10 +239,9 @@ uniform int GlyphSet <
 > = 0;
 
 uniform int ColorMode <
-    ui_category = "Appearance";
     ui_label = "Color Mode";
     ui_tooltip =
-        "Choose monochrome, a two-color palette, or source-colored glyphs.";
+        "Choose monochrome, a designed palette, or source-colored glyphs.";
     ui_type = "combo";
     ui_items =
         "Monochrome\0"
@@ -190,9 +249,223 @@ uniform int ColorMode <
         "Cell Tint\0";
 > = 1;
 
+uniform int PaletteType <
+    ui_label = "Palette Type";
+    ui_tooltip =
+        "Generate a harmonious palette or select every colour manually.";
+    ui_type = "combo";
+    ui_items =
+        "Generated Palette\0"
+        "Manual Palette (2 Colors)\0"
+        "Manual Palette (6 Colors)\0";
+> = 0;
+
+uniform bool EnableEdgeGlyphs <
+    ui_label = "Enable Edge Glyphs";
+    ui_tooltip =
+        "Replace suitable luminance glyphs with directional contour glyphs.";
+    ui_type = "checkbox";
+> = true;
+
+uniform int GeneratedPaletteHarmony <
+    ui_category = "Generated Palette";
+    ui_label = "Harmony";
+    ui_tooltip =
+        "Tonal keeps one hue across the ramp. Analogous spreads the five "
+        "foreground roles around the seed hue. Complementary uses the "
+        "seed hue for the background and two darkest foreground roles, "
+        "then uses the opposing hue for the three brightest roles. Triadic "
+        "divides all six roles evenly between three hues.";
+    ui_type = "combo";
+    ui_items =
+        "Tonal\0"
+        "Analogous\0"
+        "Complementary\0"
+        "Triadic\0";
+> = 0;
+
+uniform float GeneratedPaletteHue <
+    ui_category = "Generated Palette";
+    ui_label = "Palette Hue";
+    ui_tooltip =
+        "Base hue shared by Tonal palettes and centered within Analogous "
+        "palettes.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 360.0;
+    ui_step = 1.0;
+    ui_units = "degrees";
+> = 68.4;
+
+uniform float GeneratedPaletteBrightness <
+    ui_category = "Generated Palette";
+    ui_label = "Palette Brightness";
+    ui_tooltip =
+        "Perceptual brightness of the middle foreground colour. Changing "
+        "the hue does not alter this value.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 1.0;
+    ui_step = 0.01;
+> = 0.7833;
+
+uniform float GeneratedPaletteColorIntensity <
+    ui_category = "Generated Palette";
+    ui_label = "Palette Color Intensity";
+    ui_tooltip =
+        "Perceptual strength of the generated colours. Values outside the "
+        "displayable range are safely reduced by gamut mapping.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 1.0;
+    ui_step = 0.01;
+> = 0.235;
+
+uniform bool RandomizeGeneratedPalette <
+    ui_category = "Generated Palette";
+    ui_label = "Randomize Palette";
+    ui_tooltip =
+        "Generate and remember a plausible palette within the tested "
+        "ranges. This temporarily overrides the palette sliders while "
+        "preserving the selected harmony.";
+    ui_type = "button";
+    nosave = true;
+> = false;
+
+uniform bool ReturnToManualPalette <
+    ui_category = "Generated Palette";
+    ui_label = "Use Slider Values";
+    ui_tooltip =
+        "Stop using the remembered random palette and return generation "
+        "to the visible sliders.";
+    ui_type = "button";
+    nosave = true;
+> = false;
+
+uniform float GeneratedPaletteHueSpan <
+    ui_category = "Generated Palette - Fine Tuning";
+    ui_category_closed = true;
+    ui_label = "Analogous Hue Span";
+    ui_tooltip =
+        "Total hue angle covered by the five foreground roles. The darkest "
+        "and lightest roles sit at opposite ends of this span.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 180.0;
+    ui_step = 1.0;
+    ui_units = "degrees";
+> = 60.0;
+
+uniform float GeneratedPaletteLightnessRange <
+    ui_category = "Generated Palette - Fine Tuning";
+    ui_category_closed = true;
+    ui_label = "Foreground Lightness Range";
+    ui_tooltip =
+        "Total Oklab lightness range covered by the five foreground roles.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 0.8;
+    ui_step = 0.01;
+> = 0.3;
+
+uniform float GeneratedPaletteColorfulnessRange <
+    ui_category = "Generated Palette - Fine Tuning";
+    ui_category_closed = true;
+    ui_label = "Color Intensity Range";
+    ui_tooltip =
+        "Controls how much chroma grows from the darkest to the lightest "
+        "foreground role.";
+    ui_type = "slider";
+    ui_min = -1.0;
+    ui_max = 1.0;
+    ui_step = 0.01;
+> = 0.0;
+
+uniform float GeneratedPaletteBackgroundSeparation <
+    ui_category = "Generated Palette - Fine Tuning";
+    ui_category_closed = true;
+    ui_label = "Background Separation";
+    ui_tooltip =
+        "Oklab lightness distance between the seed and generated "
+        "background role.";
+    ui_type = "slider";
+    ui_min = 0.0;
+    ui_max = 1.0;
+    ui_step = 0.01;
+> = 0.55;
+
+uniform float3 PaletteBackgroundColor <
+    ui_category = "Manual Palette - 2 Colors";
+    ui_category_closed = true;
+    ui_label = "Background";
+    ui_tooltip =
+        "Background color used by the two-color manual palette.";
+    ui_type = "color";
+> = float3(
+    0.09383891,
+    0.078431375,
+    0.078431375
+);
+
+uniform float3 PaletteGlyphColor <
+    ui_category = "Manual Palette - 2 Colors";
+    ui_category_closed = true;
+    ui_label = "Foreground";
+    ui_tooltip =
+        "Foreground color used by the two-color manual palette.";
+    ui_type = "color";
+> = float3(
+    0.8392157,
+    0.76862746,
+    0.64705884
+);
+
+uniform float3 PaletteRampBackgroundColor <
+    ui_category = "Manual Palette - 6 Colors";
+    ui_category_closed = true;
+    ui_label = "Background";
+    ui_type = "color";
+> = float3(0.055, 0.045, 0.05);
+
+uniform float3 PaletteRampColor0 <
+    ui_category = "Manual Palette - 6 Colors";
+    ui_category_closed = true;
+    ui_label = "Foreground 1 (Darkest)";
+    ui_type = "color";
+> = float3(0.24, 0.17, 0.16);
+
+uniform float3 PaletteRampColor1 <
+    ui_category = "Manual Palette - 6 Colors";
+    ui_category_closed = true;
+    ui_label = "Foreground 2";
+    ui_type = "color";
+> = float3(0.37, 0.27, 0.22);
+
+uniform float3 PaletteRampColor2 <
+    ui_category = "Manual Palette - 6 Colors";
+    ui_category_closed = true;
+    ui_label = "Foreground 3";
+    ui_type = "color";
+> = float3(0.52, 0.40, 0.31);
+
+uniform float3 PaletteRampColor3 <
+    ui_category = "Manual Palette - 6 Colors";
+    ui_category_closed = true;
+    ui_label = "Foreground 4";
+    ui_type = "color";
+> = float3(0.68, 0.56, 0.43);
+
+uniform float3 PaletteRampColor4 <
+    ui_category = "Manual Palette - 6 Colors";
+    ui_category_closed = true;
+    ui_label = "Foreground 5 (Brightest)";
+    ui_type = "color";
+> = float3(0.8392157, 0.76862746, 0.64705884);
+
 uniform float CellTintValueInfluence <
-    ui_category = "Appearance";
-    ui_label = "Cell Tint Value Influence";
+    ui_category = "Cell Tint";
+    ui_category_closed = true;
+    ui_label = "Value Influence";
     ui_tooltip =
         "Controls how much source Value affects tinted glyph brightness. "
         "Zero reproduces the original full-Value tint; one uses the cell's "
@@ -203,40 +476,9 @@ uniform float CellTintValueInfluence <
     ui_step = 0.01;
 > = 0.65;
 
-uniform float3 PaletteGlyphColor <
-    ui_category = "Appearance";
-    ui_label = "Glyph Color";
-    ui_tooltip =
-        "Foreground color used when Color Mode is set to Palette.";
-    ui_type = "color";
-> = float3(
-    0.8392157,
-    0.76862746,
-    0.64705884
-);
-
-uniform float3 PaletteBackgroundColor <
-    ui_category = "Appearance";
-    ui_label = "Background Color";
-    ui_tooltip =
-        "Background color used when Color Mode is set to Palette.";
-    ui_type = "color";
-> = float3(
-    0.09383891,
-    0.078431375,
-    0.078431375
-);
-
-uniform bool EnableEdgeGlyphs <
-    ui_category = "Appearance";
-    ui_label = "Enable Edge Glyphs";
-    ui_tooltip =
-        "Replace suitable luminance glyphs with directional contour glyphs.";
-    ui_type = "checkbox";
-> = true;
-
 uniform bool EnableDepthEdges <
-    ui_category = "Appearance";
+    ui_category = "Edge Rendering";
+    ui_category_closed = true;
     ui_label = "Enable Depth Edges";
     ui_tooltip =
         "Prefer geometry-derived contour glyphs when ReShade exposes a "
@@ -245,7 +487,8 @@ uniform bool EnableDepthEdges <
 > = true;
 
 uniform bool EnableTemporalEdgeStability <
-    ui_category = "Appearance";
+    ui_category = "Edge Rendering";
+    ui_category_closed = true;
     ui_label = "Enable Temporal Edge Stability";
     ui_tooltip =
         "Reduce edge flicker by retaining well-supported cell edges and "
@@ -320,7 +563,9 @@ uniform int DebugView <
         "Stabilized Depth Edge Only ASCII\0"
         "Depth Temporal History Validity\0"
         "Combined Edge Source\0"
-        "Combined Edge Only ASCII\0";
+        "Combined Edge Only ASCII\0"
+        "Palette Slot\0"
+        "Generated Palette Strip\0";
 > = 4;
 
 uniform float SobelMagnitudeDisplayScale <
@@ -796,6 +1041,449 @@ float3 LinearToSRGB(float3 color)
     );
 }
 
+// Oklab conversion matrices by Bjorn Ottosson.
+// Public domain and also available under the MIT license:
+// https://bottosson.github.io/posts/oklab/
+float3 OKLabToLinearSRGB(float3 color)
+{
+    float lRoot =
+        color.x
+        + 0.3963377774 * color.y
+        + 0.2158037573 * color.z;
+
+    float mRoot =
+        color.x
+        - 0.1055613458 * color.y
+        - 0.0638541728 * color.z;
+
+    float sRoot =
+        color.x
+        - 0.0894841775 * color.y
+        - 1.2914855480 * color.z;
+
+    float l = lRoot * lRoot * lRoot;
+    float m = mRoot * mRoot * mRoot;
+    float s = sRoot * sRoot * sRoot;
+
+    return float3(
+        4.0767416621 * l
+            - 3.3077115913 * m
+            + 0.2309699292 * s,
+        -1.2684380046 * l
+            + 2.6097574011 * m
+            - 0.3413193965 * s,
+        -0.0041960863 * l
+            - 0.7034186147 * m
+            + 1.7076147010 * s
+    );
+}
+
+bool IsLinearSRGBInGamut(float3 color)
+{
+    return all(color >= 0.0)
+        && all(color <= 1.0);
+}
+
+float3 GamutMapOKLCH(
+    float lightness,
+    float2 hueDirection,
+    float requestedChroma
+)
+{
+    float safeChroma = max(requestedChroma, 0.0);
+
+    float3 requestedLab = float3(
+        saturate(lightness),
+        hueDirection * safeChroma
+    );
+
+    float3 requestedRGB = OKLabToLinearSRGB(
+        requestedLab
+    );
+
+    if (IsLinearSRGBInGamut(requestedRGB))
+    {
+        return saturate(requestedRGB);
+    }
+
+    float lowerChroma = 0.0;
+    float upperChroma = safeChroma;
+
+    for (int iteration = 0; iteration < 8; ++iteration)
+    {
+        float testedChroma =
+            (lowerChroma + upperChroma) * 0.5;
+
+        float3 testedLab = float3(
+            saturate(lightness),
+            hueDirection * testedChroma
+        );
+
+        float3 testedRGB = OKLabToLinearSRGB(
+            testedLab
+        );
+
+        if (IsLinearSRGBInGamut(testedRGB))
+        {
+            lowerChroma = testedChroma;
+        }
+        else
+        {
+            upperChroma = testedChroma;
+        }
+    }
+
+    float3 mappedLab = float3(
+        saturate(lightness),
+        hueDirection * lowerChroma
+    );
+
+    return saturate(
+        OKLabToLinearSRGB(mappedLab)
+    );
+}
+
+float2 RotateHueDirection(
+    float2 hueDirection,
+    float angleDegrees
+)
+{
+    float angleRadians =
+        angleDegrees * 0.01745329252;
+
+    float sineValue;
+    float cosineValue;
+    sincos(
+        angleRadians,
+        sineValue,
+        cosineValue
+    );
+
+    return float2(
+        hueDirection.x * cosineValue
+            - hueDirection.y * sineValue,
+        hueDirection.x * sineValue
+            + hueDirection.y * cosineValue
+    );
+}
+
+float PaletteRandomValue(float seed, float channel)
+{
+    return frac(
+        sin(seed * 12.9898 + channel * 78.233)
+        * 43758.5453
+    );
+}
+
+float4 BuildRandomPaletteStatePixel(
+    int statePixel
+)
+{
+    float seed =
+        float(AsciiPaletteFrameCount) + 0.5;
+
+    float hue =
+        PaletteRandomValue(seed, 1.0) * 360.0;
+
+    float lightnessRange = lerp(
+        0.35,
+        0.8,
+        PaletteRandomValue(seed, 5.0)
+    );
+
+    float brightness = lerp(
+        0.6,
+        0.9,
+        PaletteRandomValue(seed, 2.0)
+    );
+
+    // Keep no more than the brightest role slightly above Oklab L = 1.
+    // This avoids collapsing several bright palette slots to the same value.
+    brightness = min(
+        brightness,
+        1.05 - lightnessRange * 0.5
+    );
+
+    brightness = max(brightness, 0.6);
+
+    float colorIntensity = lerp(
+        0.1,
+        0.8,
+        PaletteRandomValue(seed, 3.0)
+    );
+
+    float analogousHueSpan = lerp(
+        60.0,
+        180.0,
+        PaletteRandomValue(seed, 4.0)
+    );
+
+    float colorfulnessRange = lerp(
+        -0.4,
+        0.4,
+        PaletteRandomValue(seed, 6.0)
+    );
+
+    float backgroundSeparation = lerp(
+        0.52,
+        0.63,
+        PaletteRandomValue(seed, 7.0)
+    );
+
+    if (statePixel <= 0)
+    {
+        return float4(
+            hue / 360.0,
+            brightness,
+            colorIntensity,
+            analogousHueSpan / 180.0
+        );
+    }
+
+    return float4(
+        lightnessRange,
+        (colorfulnessRange + 0.4) / 0.8,
+        (backgroundSeparation - 0.52) / 0.11,
+        0.731
+    );
+}
+
+float4 UpdateRandomPaletteStatePS(
+    float4 position : SV_Position,
+    float2 texcoord : TEXCOORD
+) : SV_Target
+{
+    int statePixel = min(int(position.x), 1);
+
+    if (RandomizeGeneratedPalette)
+    {
+        return BuildRandomPaletteStatePixel(
+            statePixel
+        );
+    }
+
+    if (ReturnToManualPalette)
+    {
+        return 0.0;
+    }
+
+    float2 stateUV = float2(
+        (float(statePixel) + 0.5) / 2.0,
+        0.5
+    );
+
+    return tex2Dlod(
+        AsciiPreviousRandomPaletteState,
+        float4(stateUV, 0.0, 0.0)
+    );
+}
+
+float4 CopyRandomPaletteStatePS(
+    float4 position : SV_Position,
+    float2 texcoord : TEXCOORD
+) : SV_Target
+{
+    int statePixel = min(int(position.x), 1);
+
+    float2 stateUV = float2(
+        (float(statePixel) + 0.5) / 2.0,
+        0.5
+    );
+
+    return tex2Dlod(
+        AsciiRandomPaletteState,
+        float4(stateUV, 0.0, 0.0)
+    );
+}
+
+struct GeneratedPaletteParameters
+{
+    float hue;
+    float brightness;
+    float colorIntensity;
+    float analogousHueSpan;
+    float lightnessRange;
+    float colorfulnessRange;
+    float backgroundSeparation;
+};
+
+GeneratedPaletteParameters ResolveGeneratedPaletteParameters()
+{
+    GeneratedPaletteParameters parameters;
+
+    parameters.hue = GeneratedPaletteHue;
+    parameters.brightness = GeneratedPaletteBrightness;
+    parameters.colorIntensity =
+        GeneratedPaletteColorIntensity;
+    parameters.analogousHueSpan =
+        GeneratedPaletteHueSpan;
+    parameters.lightnessRange =
+        GeneratedPaletteLightnessRange;
+    parameters.colorfulnessRange =
+        GeneratedPaletteColorfulnessRange;
+    parameters.backgroundSeparation =
+        GeneratedPaletteBackgroundSeparation;
+
+    float4 randomState0 = tex2Dlod(
+        AsciiRandomPaletteState,
+        float4(0.25, 0.5, 0.0, 0.0)
+    );
+
+    float4 randomState1 = tex2Dlod(
+        AsciiRandomPaletteState,
+        float4(0.75, 0.5, 0.0, 0.0)
+    );
+
+    bool randomStateIsActive =
+        abs(randomState1.a - 0.731) < 0.001;
+
+    if (randomStateIsActive)
+    {
+        parameters.hue = randomState0.r * 360.0;
+        parameters.brightness = randomState0.g;
+        parameters.colorIntensity = randomState0.b;
+        parameters.analogousHueSpan =
+            randomState0.a * 180.0;
+        parameters.lightnessRange = randomState1.r;
+        parameters.colorfulnessRange =
+            randomState1.g * 0.8 - 0.4;
+        parameters.backgroundSeparation =
+            randomState1.b * 0.11 + 0.52;
+    }
+
+    return parameters;
+}
+
+float3 GeneratePaletteRole(int roleIndex)
+{
+    GeneratedPaletteParameters parameters =
+        ResolveGeneratedPaletteParameters();
+
+    float seedLightness =
+        saturate(parameters.brightness);
+
+    float2 hueDirection = RotateHueDirection(
+        float2(1.0, 0.0),
+        parameters.hue
+    );
+
+    // The user-facing 0-1 intensity maps onto a practical OKLCH chroma
+    // range. Gamut mapping handles hue/lightness combinations that cannot
+    // display the full requested intensity.
+    float baseChroma =
+        saturate(parameters.colorIntensity)
+        * 0.4;
+
+    float targetLightness;
+    float targetChroma;
+    float hueOffsetDegrees = 0.0;
+
+    if (roleIndex <= 0)
+    {
+        targetLightness = max(
+            seedLightness
+                - max(
+                    parameters.backgroundSeparation,
+                    0.0
+                ),
+            0.01
+        );
+
+        targetChroma = baseChroma * 0.35;
+
+        if (GeneratedPaletteHarmony == 3)
+        {
+            hueOffsetDegrees = -120.0;
+        }
+    }
+    else
+    {
+        float foregroundPosition =
+            float(roleIndex - 1) / 4.0;
+
+        float centeredPosition =
+            foregroundPosition - 0.5;
+
+        targetLightness = saturate(
+            seedLightness
+            + centeredPosition
+                * max(
+                    parameters.lightnessRange,
+                    0.0
+                )
+        );
+
+        float colorfulnessMultiplier = max(
+            1.0
+            + centeredPosition
+                * 2.0
+                * parameters.colorfulnessRange,
+            0.0
+        );
+
+        targetChroma =
+            baseChroma * colorfulnessMultiplier;
+
+        if (GeneratedPaletteHarmony == 1)
+        {
+            hueOffsetDegrees =
+                centeredPosition
+                * max(parameters.analogousHueSpan, 0.0);
+        }
+        else if (
+            GeneratedPaletteHarmony == 2
+            && roleIndex >= 3
+        )
+        {
+            // Split the six palette roles evenly: the background and two
+            // darkest foreground roles use the seed hue, while the three
+            // brightest roles use its complement. Avoiding hue interpolation
+            // or alternating bands keeps adjacent glyph steps stable.
+            hueOffsetDegrees = 180.0;
+        }
+        else if (GeneratedPaletteHarmony == 3)
+        {
+            if (roleIndex <= 1)
+            {
+                hueOffsetDegrees = -120.0;
+            }
+            else if (roleIndex >= 4)
+            {
+                hueOffsetDegrees = 120.0;
+            }
+        }
+    }
+
+    float2 roleHueDirection = RotateHueDirection(
+        hueDirection,
+        hueOffsetDegrees
+    );
+
+    float3 generatedLinear = GamutMapOKLCH(
+        targetLightness,
+        roleHueDirection,
+        targetChroma
+    );
+
+    return LinearToSRGB(generatedLinear);
+}
+
+float4 GeneratePalettePS(
+    float4 position : SV_Position,
+    float2 texcoord : TEXCOORD
+) : SV_Target
+{
+    int roleIndex = min(
+        int(position.x),
+        5
+    );
+
+    return float4(
+        GeneratePaletteRole(roleIndex),
+        1.0
+    );
+}
+
 float3 DecodeInputColor(float3 color)
 {
     float3 decodedColor = color;
@@ -842,6 +1530,119 @@ float SampleActiveGlyphAtlas(float2 atlasUV)
         GlyphAtlas,
         float4(atlasUV, 0.0, 0.0)
     ).r;
+}
+
+int GetPaletteStopIndex(float glyphIndex)
+{
+    int threeGlyphBand = int(
+        max(glyphIndex - 1.0, 0.0)
+    ) / 3;
+
+    if (GlyphSet == 0)
+    {
+        return min(threeGlyphBand * 2, 4);
+    }
+
+    return min(threeGlyphBand, 4);
+}
+
+float3 GetCustomPaletteRampColor(int paletteStop)
+{
+    if (paletteStop <= 0)
+    {
+        return PaletteRampColor0;
+    }
+
+    if (paletteStop == 1)
+    {
+        return PaletteRampColor1;
+    }
+
+    if (paletteStop == 2)
+    {
+        return PaletteRampColor2;
+    }
+
+    if (paletteStop == 3)
+    {
+        return PaletteRampColor3;
+    }
+
+    return PaletteRampColor4;
+}
+
+float3 GetPaletteStopDebugColor(int paletteStop)
+{
+    if (paletteStop <= 0)
+    {
+        return float3(1.0, 0.1, 0.1);
+    }
+
+    if (paletteStop == 1)
+    {
+        return float3(1.0, 0.7, 0.1);
+    }
+
+    if (paletteStop == 2)
+    {
+        return float3(0.1, 1.0, 0.2);
+    }
+
+    if (paletteStop == 3)
+    {
+        return float3(0.1, 0.8, 1.0);
+    }
+
+    return float3(0.55, 0.25, 1.0);
+}
+
+float3 SampleGeneratedPaletteRole(int roleIndex)
+{
+    float2 paletteUV = float2(
+        (float(clamp(roleIndex, 0, 5)) + 0.5) / 6.0,
+        0.5
+    );
+
+    return tex2Dlod(
+        AsciiGeneratedPalette,
+        float4(paletteUV, 0.0, 0.0)
+    ).rgb;
+}
+
+float3 GetPaletteForegroundColor(float glyphIndex)
+{
+    int paletteStop = GetPaletteStopIndex(glyphIndex);
+
+    if (PaletteType == 2)
+    {
+        return GetCustomPaletteRampColor(
+            paletteStop
+        );
+    }
+
+    if (PaletteType == 0)
+    {
+        return SampleGeneratedPaletteRole(
+            paletteStop + 1
+        );
+    }
+
+    return PaletteGlyphColor;
+}
+
+float3 GetPaletteBackgroundColor()
+{
+    if (PaletteType == 2)
+    {
+        return PaletteRampBackgroundColor;
+    }
+
+    if (PaletteType == 0)
+    {
+        return SampleGeneratedPaletteRole(0);
+    }
+
+    return PaletteBackgroundColor;
 }
 
 float CalculateGlyphIndex(float luminance)
@@ -2545,8 +3346,11 @@ float4 RenderLuminanceAscii(
 
     if (ColorMode == 1)
     {
-        foregroundColor = PaletteGlyphColor;
-        backgroundColor = PaletteBackgroundColor;
+        foregroundColor = GetPaletteForegroundColor(
+            glyphIndex
+        );
+
+        backgroundColor = GetPaletteBackgroundColor();
     }
     else if (ColorMode == 2)
     {
@@ -2658,8 +3462,11 @@ float4 RenderEdgeOnlyAscii(
 
     if (ColorMode == 1)
     {
-        foregroundColor = PaletteGlyphColor;
-        backgroundColor = PaletteBackgroundColor;
+        foregroundColor = GetPaletteForegroundColor(
+            GetActiveGlyphCount() - 1.0
+        );
+
+        backgroundColor = GetPaletteBackgroundColor();
     }
 
     return float4(
@@ -2764,8 +3571,11 @@ float4 RenderDepthEdgeOnlyAscii(
 
     if (ColorMode == 1)
     {
-        foregroundColor = PaletteGlyphColor;
-        backgroundColor = PaletteBackgroundColor;
+        foregroundColor = GetPaletteForegroundColor(
+            GetActiveGlyphCount() - 1.0
+        );
+
+        backgroundColor = GetPaletteBackgroundColor();
     }
 
     return float4(
@@ -2827,8 +3637,11 @@ float4 RenderCombinedEdgeOnlyAscii(uint2 outputPixel)
 
     if (ColorMode == 1)
     {
-        foregroundColor = PaletteGlyphColor;
-        backgroundColor = PaletteBackgroundColor;
+        foregroundColor = GetPaletteForegroundColor(
+            GetActiveGlyphCount() - 1.0
+        );
+
+        backgroundColor = GetPaletteBackgroundColor();
     }
 
     return float4(
@@ -2847,6 +3660,19 @@ float4 DisplayCellColorPS(
 ) : SV_Target
 {
     uint2 outputPixel = uint2(position.xy);
+
+    if (DebugView == 48)
+    {
+        int roleIndex = min(
+            int(saturate(texcoord.x) * 6.0),
+            5
+        );
+
+        return float4(
+            SampleGeneratedPaletteRole(roleIndex),
+            1.0
+        );
+    }
 
     if (DebugView == 27 || DebugView == 28)
     {
@@ -3665,6 +4491,21 @@ float4 DisplayCellColorPS(
     float glyphIndex =
         CalculateGlyphIndex(luminance);
 
+    if (DebugView == 47)
+    {
+        float3 slotColor =
+            glyphIndex < 1.0
+                ? float3(0.0, 0.0, 0.0)
+                : GetPaletteStopDebugColor(
+                    GetPaletteStopIndex(glyphIndex)
+                );
+
+        return float4(
+            EncodeAnalysisColor(slotColor),
+            1.0
+        );
+    }
+
     if (DebugView == 4)
     {
         return RenderLuminanceAscii(
@@ -3778,6 +4619,27 @@ technique AsciiShader
         VertexShader = PostProcessVS;
         PixelShader = AnalyzeCellPS;
         RenderTarget = AsciiCellColorTexture;
+    }
+
+    pass UpdateRandomPaletteState
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = UpdateRandomPaletteStatePS;
+        RenderTarget = AsciiRandomPaletteStateTexture;
+    }
+
+    pass GeneratePalette
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = GeneratePalettePS;
+        RenderTarget = AsciiGeneratedPaletteTexture;
+    }
+
+    pass StoreRandomPaletteState
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = CopyRandomPaletteStatePS;
+        RenderTarget = AsciiPreviousRandomPaletteStateTexture;
     }
 
     pass DisplayCells
