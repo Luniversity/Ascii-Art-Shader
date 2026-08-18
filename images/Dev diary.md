@@ -681,3 +681,75 @@ The chosen compromise keeps much of the softer contrast without losing as much d
 | <img src="image-65.png" width="100%" alt="Cell Tint with the chosen 0.65 Value influence"> |
 | Dark areas are calmer while foreground colours and important details remain readable. |
 
+### Working with depth
+
+Adding depth knowledge will probably improve most aspects of the shader. Here is the linearized and reversed depth buffer i get from reshade.
+
+The brighter the pixels get, the farther away they are from the camera.
+![alt text](image-68.png)
+![alt text](image-67.png)
+
+Since the depth buffer contains few tiny details and is not affected by lighting or textures, we can skip the DoG preprocessing step and directly run the sobel filter on the depth buffer. 
+
+After running sobel we get this:
+
+![alt text](image-69.png)
+
+Brighter = More likely an edge
+You can immediately see that the places we want to draw edges already is white. Howeverwe are getting a lot of artifacts.
+
+1. It looks like it is snowing. The game renders particles that has depth. When they are placed against a background the sobel sees the difference and colours it white.
+
+2. The background objects are also super white. This makes sense since they are equally defined and is against a far away background. However we should ideally care about depth-edges more when they are closer to the camera. 
+
+3. We are getting the same noise we observed when first porting to ReShade, so we might need to run similar temporal stability measures as before.
+
+### Prioritizing closer edges
+
+The Sobel filter only tells us how large the difference in depth is. It does not understand whether an edge belongs to an important foreground object or an unimportant building in the distance. 
+
+To fix this, I added a proximity weight. For every Sobel sample, the shader looks at the closest depth in the surrounding 3x3 area. Edges close to the camera keep their original strength, while edges gradually become weaker as they get farther from the camera. This means that nearby edges receive full strength. Their influence then gradually fades out as it gets further away. At a certain distance, they disappear completely.
+
+Before:
+![depth sobel magnitude](image-70.png)
+After:
+![weighted depth sobel magnitude](image-71.png)
+
+After applying the proximity weight, the very strong edges around distant buildings were reduced. I then applied a relatively strict magnitude threshold. Real object silhouettes normally produced much stronger depth gradients than small particles and other artifacts, so this removed a large amount of the unwanted depth information.
+
+![binary depth edge mask](image-72.png)
+
+Using the same voting system as the other edge aggregation method, but with a slighlty tweaked settings, gives us the a rendered version of depth detected edges with asciis
+
+But we still need to address temporal stability. Hair and other thin shapes were still noisy. They could create a valid edge in one frame and then lose most of their support in the next frame because of small changes in movement, TAA or the depth buffer.
+
+I reused the temporal hysteresis system from the image edges, but with more forgiving retention settings:
+
+    Entry support: 10 pixels
+    Entry dominance: 0.5
+
+    Retention support: 2 pixels
+    Retention dominance: 0.1
+    Direction switch margin: 3 pixels
+
+The strict entry requirements prevent weak particle edges from appearing in the first place. Once an edge has proved that it is real, the forgiving retention requirements allow it to survive temporary drops in evidence. We can get away with this since the important contours we care about are less prone to the same kind of noise luminance based edge detection. 
+
+![alt text](image-73.png)
+
+### Combining image and depth edges
+
+Now that we have edge information from two sources, I had to decide what to do when the two systems disagreed on whether there should be an edge or not (or which orientation the edge is in). Both systems are useful and good at different things. Image edges can see edges caused by colour and texture, while depth edges are much better at finding silhouettes of objects. 
+
+The simplest way of doing this is to combine the final output/decision by each system, instead of merging them earlier. 
+
+So if there is a valid depth edge -> Use its direction
+Else -> Use the image-based edge information
+If neither system detect an edge -> Use regular luminance glyph
+
+This way the depth edges gets priority since they are more likely to be edges we perceive to be real.
+
+Here is the final result:
+
+![no edges](image-74.png)
+![image edges](image-75.png)
+![image and depth edges](image-76.png)
