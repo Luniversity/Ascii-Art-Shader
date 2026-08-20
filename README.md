@@ -5,7 +5,7 @@
 This is a real-time ReShade effect that converts a game's image into ASCII art
 using luminance, contours, and depth.
 
-![ASCII image of Sciel](images/image-92.png)
+![ASCII image of Sciel](docs/assets/image-92.png)
 
 ## Overview
 
@@ -42,10 +42,10 @@ post-processing effect in existing games.
 
 ## Screenshots
 
-See the Dev diary for more screenshots :)
+See the [development diary](docs/index.md) for more screenshots :)
 
-![ASCII image of Simon](images/image-79.png)
-![ASCII image of Sciel, purple](images/image-88.png)
+![ASCII image of Simon](docs/assets/image-79.png)
+![ASCII image of Sciel, purple](docs/assets/image-88.png)
 
 ## Installation
 
