@@ -42,31 +42,50 @@ post-processing effect in existing games.
 
 ## Screenshots
 
-(todo: add more screenshots)
+See the Dev diary for more screenshots :)
 
 ![ASCII image of Simon](images/image-79.png)
 ![ASCII image of Sciel, purple](images/image-88.png)
 
 ## Installation
 
-(use a generic reshade guide as a base, we can test later)
+1. Download and install ReShade from the
+   [official ReShade website](https://reshade.me/) for the game's executable.
+2. Download `JackYe-ASCII-Shader-v1.0.0.zip` from the
+   [latest GitHub release](https://github.com/Luniversity/Ascii-Art-Shader/releases/latest).
+3. Extract the package directly into the folder containing the game executable
+   and ReShade. Allow its `reshade-shaders` folder to merge with the existing
+   folder.
+4. Launch the game, open the ReShade overlay, and enable the `JackYeAscii`
+   technique.
+
+### Optional depth-aware contours
+
+The effect works without depth information. To use depth-aware contours,
+enable **Depth Edges** and select a usable depth buffer under
+**Add-ons > Generic Depth**. The shader's **Linearized Depth** diagnostic
+should show nearby objects as dark and distant objects as light.
+
+If the depth is incorrect, open **Edit Global Preprocessor Definitions** in
+ReShade and try the following:
+
+- If near and far values are reversed, toggle
+  `RESHADE_DEPTH_INPUT_IS_REVERSED` between `0` and `1`.
+- If the image is upside down, toggle
+  `RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN` between `0` and `1`.
+
+Apply the changes and reload the effects. If the game does not expose a usable
+depth buffer, leave **Depth Edges** disabled.
 
 ## Limitations
 
-- Depth-aware contours require ReShade to have access to a usable game depth
-  buffer. Availability and configuration vary between games and graphics APIs.
-- As a screen-space post-processing effect, the shader cannot understand the
-  identity, material, or importance of individual objects. Detailed textures
-  may therefore be interpreted as contours, while subtle edges may be missed.
-- Temporal stabilization reduces edge flicker but cannot remove it completely.
-  It uses screen-space history without motion vectors, so rapid movement or
-  sudden scene changes can still produce brief glyph changes.
-- The effect may also transform HUD and menu elements, depending on when a game
+- Depth-aware contours require ReShade to have access to a usable game depth buffer. Availability and configuration vary between games and graphics APIs.
+- The shader cannot understand things like material, or importance of individual objects. Detailed textures may therefore be interpreted as contours, while subtle edges may be missed.
+- Temporal stabilization reduces edge flicker but cannot remove it completely. It uses screen-space history without motion vectors.
+- The effect will also transform HUD and menu elements, depending on when a game
   renders its interface relative to ReShade.
 - Performance is resolution-dependent because the image and edge-processing
   stages operate across the rendered frame.
-- ReShade may be unsupported or restricted by some games, particularly titles
-  with anti-cheat systems. Users should follow each game's rules and policies.
 
 ## License and credits
 

@@ -1,5 +1,6 @@
 # Local benchmark output (selected reports may be added deliberately).
 /BenchmarkResults/
+/Dist/
 
 # Unity may create recovery scenes after a crash or interrupted save.
 /My project/Assets/_Recovery/

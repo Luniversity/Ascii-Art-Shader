@@ -12,6 +12,7 @@
 *.fx                    text eol=lf linguist-language=hlsl
 *.gitignore             text eol=lf
 *.gitattributes         text eol=lf
+*.ps1                   text eol=lf
 LICENSE                 text eol=lf
 # Define macros (only works in top-level gitattributes files)
 [attr]binary-file       -diff -merge -text

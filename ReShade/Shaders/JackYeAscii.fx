@@ -177,7 +177,7 @@ texture AsciiPreviousRandomPaletteStateTexture
 };
 
 texture GlyphAtlasTexture <
-    source = "GlyphAtlas.png";
+    source = "JackYeAscii_GlyphAtlasStandard.png";
 >
 {
     Width = ASCII_CLASSIC_GLYPH_ATLAS_WIDTH;
@@ -186,7 +186,7 @@ texture GlyphAtlasTexture <
 };
 
 texture GlyphAtlas16Texture <
-    source = "GlyphAtlas16.png";
+    source = "JackYeAscii_GlyphAtlasExtended.png";
 >
 {
     Width = ASCII_EXTENDED_GLYPH_ATLAS_WIDTH;
@@ -195,7 +195,7 @@ texture GlyphAtlas16Texture <
 };
 
 texture EdgeGlyphAtlasTexture <
-    source = "EdgeGlyphAtlas.png";
+    source = "JackYeAscii_EdgeAtlas.png";
 >
 {
     Width = ASCII_EDGE_GLYPH_ATLAS_WIDTH;
@@ -4279,7 +4279,7 @@ float4 DisplayCellColorPS(
     );
 }
 
-technique AsciiShader
+technique JackYeAscii
 {
     pass AnalyzeFullResolutionLuminance
     {
